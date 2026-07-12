@@ -6,15 +6,6 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
-### Fixed
-
-- Consecutive Telegram messages produced by one large paste are debounced and
-  joined into a single logical Rich Markdown conversion instead of rendering
-  partial fragments separately.
-- Inputs rejected because GitHub README layout HTML embeds badge images inside
-  paragraphs receive one deterministic compatibility retry while the exact
-  original source remains stored for audit.
-
 ## v0.1.0 - 2026-07-13
 
 First public release. Promoted from `v0.1.0-alpha.1` after production
@@ -33,6 +24,15 @@ or warnings.
 - Includes bounded retries, token-safe errors, durable offsets, replay
   protection, `/healthz`, `/metrics`, retention cleanup, Docker health checks,
   CI, vulnerability scanning, and tag-driven releases.
+
+### Fixed
+
+- Consecutive Telegram messages produced by one large paste are debounced and
+  joined into a single logical Rich Markdown conversion instead of rendering
+  partial fragments separately.
+- Inputs rejected because GitHub README layout HTML embeds badge images inside
+  paragraphs receive one deterministic compatibility retry while the exact
+  original source remains stored for audit.
 
 ### Operations
 
