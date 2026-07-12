@@ -6,6 +6,42 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
+### Fixed
+
+- Consecutive Telegram messages produced by one large paste are debounced and
+  joined into a single logical Rich Markdown conversion instead of rendering
+  partial fragments separately.
+- Inputs rejected because GitHub README layout HTML embeds badge images inside
+  paragraphs receive one deterministic compatibility retry while the exact
+  original source remains stored for audit.
+
+## v0.1.0 - 2026-07-13
+
+First public release. Promoted from `v0.1.0-alpha.1` after production
+verification on WS04: Telegram long polling remained fresh, PostgreSQL and
+container health checks stayed green, and the scoped audit reported no errors
+or warnings.
+
+### Highlights
+
+- Renders the user's exact source text through Telegram Bot API 10.1 Rich
+  Markdown without a custom parser, AI, buttons, or settings.
+- Keeps `/start` as the only command and serves private chats in English.
+- Uses the shared FreshLab `core-postgres` identity hub with an isolated
+  `makeitmd` schema for conversion audit, lifetime statistics, and polling
+  state.
+- Includes bounded retries, token-safe errors, durable offsets, replay
+  protection, `/healthz`, `/metrics`, retention cleanup, Docker health checks,
+  CI, vulnerability scanning, and tag-driven releases.
+
+### Operations
+
+- Production stack: `/opt/stacks/makeitmd`.
+- Container: `makeitmd-bot`.
+- Database role/schema: `makeitmd_core` / `makeitmd`.
+- Raw terminal conversion rows expire after 90 days by default; lifetime
+  aggregate statistics remain available.
+
 ## v0.1.0-alpha.1 - 2026-07-13
 
 ### Added

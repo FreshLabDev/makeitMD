@@ -108,3 +108,37 @@ func TestBadMarkdownIsMarkedFailedAndExplained(t *testing.T) {
 		t.Fatalf("client=%+v store=%+v", client, store)
 	}
 }
+
+func TestGroupTextUpdatesJoinsTelegramPasteChunks(t *testing.T) {
+	updates := []telegram.Update{
+		testUpdateWithIDs(10, 20, 100, "# Project"),
+		testUpdateWithIDs(11, 21, 100, "first part"),
+		testUpdateWithIDs(12, 22, 101, "second part"),
+	}
+	grouped, last := groupTextUpdates(updates, 0)
+	if last != 2 {
+		t.Fatalf("last=%d", last)
+	}
+	if got, want := grouped.Message.Text, "# Project\nfirst part\nsecond part"; got != want {
+		t.Fatalf("text=%q want=%q", got, want)
+	}
+}
+
+func TestGroupTextUpdatesDoesNotJoinSeparateMessages(t *testing.T) {
+	updates := []telegram.Update{
+		testUpdateWithIDs(10, 20, 100, "first"),
+		testUpdateWithIDs(11, 22, 100, "not consecutive"),
+	}
+	_, last := groupTextUpdates(updates, 0)
+	if last != 0 {
+		t.Fatalf("last=%d, want 0", last)
+	}
+}
+
+func testUpdateWithIDs(updateID, messageID, date int64, text string) telegram.Update {
+	update := testUpdate(text)
+	update.UpdateID = updateID
+	update.Message.MessageID = messageID
+	update.Message.Date = date
+	return update
+}

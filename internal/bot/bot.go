@@ -13,12 +13,15 @@ import (
 
 	"github.com/FreshLabDev/makeitMD/internal/db"
 	"github.com/FreshLabDev/makeitMD/internal/metrics"
+	"github.com/FreshLabDev/makeitMD/internal/richmarkdown"
 	"github.com/FreshLabDev/makeitMD/internal/telegram"
 )
 
 const (
-	startText = "Send me Markdown. I’ll render it."
-	errorText = "I couldn’t render that Markdown. Check the syntax and try again."
+	startText     = "Send me Markdown. I’ll render it."
+	errorText     = "I couldn’t render that Markdown. Check the syntax and try again."
+	chunkDebounce = 700 * time.Millisecond
+	chunkMaxGap   = 2 * time.Second
 )
 
 type Store interface {
@@ -81,8 +84,14 @@ func (b *Bot) Run(ctx context.Context) error {
 			b.log.Info("telegram polling recovered", "after_failures", pollFailures)
 			pollFailures = 0
 		}
+		if hasBatchableText(updates) && wait(ctx, chunkDebounce) {
+			if refreshed, refreshErr := b.telegram.GetUpdates(ctx, offset); refreshErr == nil && len(refreshed) >= len(updates) {
+				updates = refreshed
+			}
+		}
 		b.lastPollUnix.Store(time.Now().Unix())
-		for _, update := range updates {
+		for index := 0; index < len(updates); {
+			update, lastIndex := groupTextUpdates(updates, index)
 			handleErr := b.handle(ctx, update)
 			if handleErr != nil {
 				if ctx.Err() != nil {
@@ -108,11 +117,12 @@ func (b *Bot) Run(ctx context.Context) error {
 				lastFailedUpdate = 0
 				failedRetries = 0
 			}
-			offset = update.UpdateID + 1
+			offset = updates[lastIndex].UpdateID + 1
 			if err := b.store.AdvanceOffset(ctx, offset); err != nil {
 				return err
 			}
 			metrics.UpdatesProcessed.Inc()
+			index = lastIndex + 1
 		}
 	}
 	return nil
@@ -157,6 +167,19 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 			metrics.TelegramRateLimit.Inc()
 		}
 		if errors.As(err, &apiErr) && apiErr.ErrorCode == 400 {
+			normalized := richmarkdown.NormalizeFallback(message.Text)
+			if normalized != message.Text {
+				if retryErr := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, normalized); retryErr == nil {
+					if markErr := b.store.MarkSent(ctx, conversionID); markErr != nil {
+						return markErr
+					}
+					metrics.ConversionsNormalized.Inc()
+					metrics.ConversionsSent.Inc()
+					return nil
+				} else if !isBadRequest(retryErr) {
+					return retryErr
+				}
+			}
 			if markErr := b.store.MarkFailed(ctx, conversionID, "telegram_bad_request"); markErr != nil {
 				return markErr
 			}
@@ -170,6 +193,61 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 	}
 	metrics.ConversionsSent.Inc()
 	return nil
+}
+
+func isBadRequest(err error) bool {
+	var apiErr *telegram.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode == http.StatusBadRequest
+}
+
+func hasBatchableText(updates []telegram.Update) bool {
+	for _, update := range updates {
+		if batchableMessage(update.Message) {
+			return true
+		}
+	}
+	return false
+}
+
+func groupTextUpdates(updates []telegram.Update, start int) (telegram.Update, int) {
+	first := updates[start]
+	if !batchableMessage(first.Message) {
+		return first, start
+	}
+	combined := *first.Message
+	last := start
+	for next := start + 1; next < len(updates); next++ {
+		candidate := updates[next].Message
+		previous := updates[last].Message
+		if !samePaste(previous, candidate) {
+			break
+		}
+		combined.Text += "\n" + candidate.Text
+		last = next
+	}
+	first.Message = &combined
+	return first, last
+}
+
+func batchableMessage(message *telegram.Message) bool {
+	if message == nil || message.From == nil || message.From.IsBot || message.Chat.Type != "private" || message.Text == "" {
+		return false
+	}
+	return !strings.HasPrefix(strings.TrimSpace(message.Text), "/")
+}
+
+func samePaste(previous, candidate *telegram.Message) bool {
+	if !batchableMessage(previous) || !batchableMessage(candidate) {
+		return false
+	}
+	if previous.Chat.ID != candidate.Chat.ID || previous.From.ID != candidate.From.ID || candidate.MessageID != previous.MessageID+1 {
+		return false
+	}
+	if previous.Date == 0 || candidate.Date == 0 {
+		return true
+	}
+	gap := time.Duration(candidate.Date-previous.Date) * time.Second
+	return gap >= 0 && gap <= chunkMaxGap
 }
 
 func pollRetryDelay(failures int) time.Duration {

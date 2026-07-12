@@ -13,11 +13,12 @@ func (c *Counter) Inc()         { c.value.Add(1) }
 func (c *Counter) Value() int64 { return c.value.Load() }
 
 var (
-	PollingErrors     Counter
-	UpdatesProcessed  Counter
-	ConversionsSent   Counter
-	ConversionsFailed Counter
-	TelegramRateLimit Counter
+	PollingErrors         Counter
+	UpdatesProcessed      Counter
+	ConversionsSent       Counter
+	ConversionsFailed     Counter
+	ConversionsNormalized Counter
+	TelegramRateLimit     Counter
 )
 
 func Handler() http.Handler {
@@ -27,6 +28,7 @@ func Handler() http.Handler {
 		writeCounter(w, "makeitmd_updates_processed_total", "Telegram updates acknowledged.", UpdatesProcessed.Value())
 		writeCounter(w, "makeitmd_conversions_sent_total", "Rich Markdown messages sent successfully.", ConversionsSent.Value())
 		writeCounter(w, "makeitmd_conversions_failed_total", "Rich Markdown inputs rejected by Telegram.", ConversionsFailed.Value())
+		writeCounter(w, "makeitmd_conversions_normalized_total", "Messages delivered through the GitHub HTML compatibility fallback.", ConversionsNormalized.Value())
 		writeCounter(w, "makeitmd_telegram_rate_limits_total", "Telegram requests still rate-limited after retry.", TelegramRateLimit.Value())
 	})
 }
