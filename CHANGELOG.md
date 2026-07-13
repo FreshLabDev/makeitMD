@@ -12,6 +12,12 @@ Use this section for changes that are merged but not released yet.
   before sending Rich Markdown, including entities across joined paste chunks.
 - Added retention-bound operator audit fields for the Telegram input, actual
   outbound Markdown, and raw `sendRichMessage` result.
+- Preserved inline HTML inside raw HTML tables so bold and italic cells aren't
+  degraded to literal Markdown markers during compatibility fallback.
+- Normalized linked Markdown badge images into ordinary links when Telegram
+  rejects them as unavailable rich-message media.
+- Recorded every fallback request/result pair instead of only the terminal
+  delivery response.
 
 ## v0.1.0 - 2026-07-13
 

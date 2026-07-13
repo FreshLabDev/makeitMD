@@ -52,7 +52,9 @@ Keep makeitMD minimal, private by default, and production-minded.
 
 - Follow `docs/versioning.md` and `docs/releases.md`.
 - Keep notable changes under `## Unreleased` in `CHANGELOG.md` until release preparation.
-- Do not publish a release without explicit user approval.
+- Every production deployment must publish its matching alpha/beta/RC
+  prerelease in the same delivery flow.
+- Stable and otherwise full releases require explicit user approval.
 
 ## Verification
 

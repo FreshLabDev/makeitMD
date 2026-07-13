@@ -53,6 +53,12 @@ type MessageEntity struct {
 
 type Result = json.RawMessage
 
+type DeliveryAttempt struct {
+	Markdown string          `json:"markdown"`
+	Response json.RawMessage `json:"response,omitempty"`
+	Error    string          `json:"error,omitempty"`
+}
+
 type Update struct {
 	UpdateID int64    `json:"update_id"`
 	Message  *Message `json:"message"`

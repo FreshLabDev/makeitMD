@@ -29,8 +29,8 @@ type Store interface {
 	AdvanceOffset(context.Context, int64) error
 	Touch(context.Context, telegram.User) error
 	CreateConversion(context.Context, int64, telegram.Message, string) (int64, db.ConversionStatus, error)
-	MarkSent(context.Context, int64, string, telegram.Result) error
-	MarkFailed(context.Context, int64, string, telegram.Result) error
+	MarkSent(context.Context, int64, string, telegram.Result, []telegram.DeliveryAttempt) error
+	MarkFailed(context.Context, int64, string, string, telegram.Result, []telegram.DeliveryAttempt) error
 }
 
 type Telegram interface {
@@ -163,6 +163,7 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 		return b.telegram.SendText(ctx, message.Chat.ID, errorText)
 	}
 	response, err := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, renderedMarkdown)
+	attempts := []telegram.DeliveryAttempt{deliveryAttempt(renderedMarkdown, response, err)}
 	if err != nil {
 		var apiErr *telegram.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
@@ -172,8 +173,9 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 			normalized := richmarkdown.NormalizeFallback(renderedMarkdown)
 			if normalized != renderedMarkdown {
 				retryResponse, retryErr := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, normalized)
+				attempts = append(attempts, deliveryAttempt(normalized, retryResponse, retryErr))
 				if retryErr == nil {
-					if markErr := b.store.MarkSent(ctx, conversionID, normalized, retryResponse); markErr != nil {
+					if markErr := b.store.MarkSent(ctx, conversionID, normalized, retryResponse, attempts); markErr != nil {
 						return markErr
 					}
 					metrics.ConversionsNormalized.Inc()
@@ -188,7 +190,7 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 			if len(response) == 0 {
 				response = apiResponse(err)
 			}
-			if markErr := b.store.MarkFailed(ctx, conversionID, "telegram_bad_request", response); markErr != nil {
+			if markErr := b.store.MarkFailed(ctx, conversionID, "telegram_bad_request", attempts[len(attempts)-1].Markdown, response, attempts); markErr != nil {
 				return markErr
 			}
 			metrics.ConversionsFailed.Inc()
@@ -196,11 +198,22 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 		}
 		return err
 	}
-	if err := b.store.MarkSent(ctx, conversionID, renderedMarkdown, response); err != nil {
+	if err := b.store.MarkSent(ctx, conversionID, renderedMarkdown, response, attempts); err != nil {
 		return err
 	}
 	metrics.ConversionsSent.Inc()
 	return nil
+}
+
+func deliveryAttempt(markdown string, response telegram.Result, err error) telegram.DeliveryAttempt {
+	attempt := telegram.DeliveryAttempt{Markdown: markdown, Response: response}
+	if err != nil {
+		attempt.Error = err.Error()
+		if len(attempt.Response) == 0 {
+			attempt.Response = apiResponse(err)
+		}
+	}
+	return attempt
 }
 
 func apiResponse(err error) telegram.Result {

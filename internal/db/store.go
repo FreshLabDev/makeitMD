@@ -73,7 +73,7 @@ func (s *Store) CreateConversion(ctx context.Context, updateID int64, message te
 	return id, status, err
 }
 
-func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string, response telegram.Result) error {
+func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string, response telegram.Result, attempts []telegram.DeliveryAttempt) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -85,10 +85,10 @@ func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string,
 	err = tx.QueryRow(ctx, `
 		UPDATE conversions
 		SET status='sent', sent_at=now(), failed_at=NULL, error_code=NULL,
-			rendered_markdown=$2, telegram_response=$3
+			rendered_markdown=$2, telegram_response=$3, telegram_attempts=$4
 		WHERE id=$1 AND status='received'
 		RETURNING telegram_user_id, character_count, byte_count, sent_at
-	`, id, renderedMarkdown, nullableJSON(response)).Scan(&userID, &characters, &bytes, &sentAt)
+	`, id, renderedMarkdown, nullableJSON(response), encodedJSON(attempts)).Scan(&userID, &characters, &bytes, &sentAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tx.Commit(ctx)
 	}
@@ -112,13 +112,21 @@ func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string,
 	return tx.Commit(ctx)
 }
 
-func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode string, response telegram.Result) error {
+func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode, renderedMarkdown string, response telegram.Result, attempts []telegram.DeliveryAttempt) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE conversions SET status='failed', failed_at=now(), error_code=$2,
-			telegram_response=$3
+			rendered_markdown=$3, telegram_response=$4, telegram_attempts=$5
 		WHERE id=$1 AND status='received'
-	`, id, errorCode, nullableJSON(response))
+	`, id, errorCode, renderedMarkdown, nullableJSON(response), encodedJSON(attempts))
 	return err
+}
+
+func encodedJSON(value any) any {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	return string(encoded)
 }
 
 func nullableJSON(raw json.RawMessage) any {

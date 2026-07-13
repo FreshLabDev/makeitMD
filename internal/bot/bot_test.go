@@ -28,11 +28,11 @@ func (s *fakeStore) CreateConversion(context.Context, int64, telegram.Message, s
 	}
 	return 9, status, nil
 }
-func (s *fakeStore) MarkSent(context.Context, int64, string, telegram.Result) error {
+func (s *fakeStore) MarkSent(context.Context, int64, string, telegram.Result, []telegram.DeliveryAttempt) error {
 	s.sent++
 	return nil
 }
-func (s *fakeStore) MarkFailed(context.Context, int64, string, telegram.Result) error {
+func (s *fakeStore) MarkFailed(context.Context, int64, string, string, telegram.Result, []telegram.DeliveryAttempt) error {
 	s.failed++
 	return nil
 }

@@ -9,6 +9,10 @@
 4. Move `Unreleased` notes to `## vX.Y.Z - YYYY-MM-DD`.
 5. Create an annotated tag and matching GitHub Release.
 
+Production deployment and its matching alpha/beta/RC prerelease are one
+operation: never leave production running an unpublished build. Stable and
+otherwise full releases are published only on an explicit user command.
+
 Release notes use this shape:
 
 ```text
