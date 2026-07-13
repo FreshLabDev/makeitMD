@@ -42,8 +42,12 @@ func TestSendRichMarkdownPreservesInput(t *testing.T) {
 
 	client := NewClient("test-token")
 	client.apiBase = server.URL
-	if err := client.SendRichMarkdown(context.Background(), 42, input); err != nil {
+	result, err := client.SendRichMarkdown(context.Background(), 42, input)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if string(result) != `{"message_id":1}` {
+		t.Fatalf("result=%s", result)
 	}
 }
 
@@ -64,6 +68,9 @@ func TestGetUpdatesDecodesTelegramEnvelope(t *testing.T) {
 	}
 	if len(updates) != 1 || updates[0].UpdateID != 12 || updates[0].Message.Text != "# hi" {
 		t.Fatalf("unexpected updates: %+v", updates)
+	}
+	if len(updates[0].Message.RawMessages) != 1 || !strings.Contains(string(updates[0].Message.RawMessages[0]), `"text":"# hi"`) {
+		t.Fatalf("raw message not preserved: %s", updates[0].Message.RawMessages)
 	}
 }
 
@@ -125,7 +132,7 @@ func TestAPIErrorDoesNotExposeTokenOrURL(t *testing.T) {
 
 	client := NewClient("secret-token")
 	client.apiBase = server.URL
-	err := client.SendRichMarkdown(context.Background(), 42, "**broken")
+	_, err := client.SendRichMarkdown(context.Background(), 42, "**broken")
 	if err == nil || err.Error() != "telegram sendRichMessage failed: Bad Request: can't parse rich message" {
 		t.Fatalf("unexpected error: %v", err)
 	}

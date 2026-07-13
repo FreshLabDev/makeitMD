@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -52,22 +53,27 @@ func (s *Store) Touch(ctx context.Context, user telegram.User) error {
 	return err
 }
 
-func (s *Store) CreateConversion(ctx context.Context, updateID int64, message telegram.Message) (int64, ConversionStatus, error) {
+func (s *Store) CreateConversion(ctx context.Context, updateID int64, message telegram.Message, renderedMarkdown string) (int64, ConversionStatus, error) {
 	var id int64
 	var status ConversionStatus
-	err := s.pool.QueryRow(ctx, `
+	input, err := encodeTelegramInput(message)
+	if err != nil {
+		return 0, "", fmt.Errorf("encode telegram input: %w", err)
+	}
+	err = s.pool.QueryRow(ctx, `
 		INSERT INTO conversions (
 			telegram_update_id, telegram_message_id, telegram_user_id,
-			source_text, character_count, byte_count
-		) VALUES ($1,$2,$3,$4,$5,$6)
+			source_text, character_count, byte_count,
+			telegram_input, rendered_markdown
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		ON CONFLICT (telegram_update_id) DO UPDATE SET telegram_update_id = EXCLUDED.telegram_update_id
 		RETURNING id, status
 	`, updateID, message.MessageID, message.From.ID, message.Text,
-		utf8.RuneCountInString(message.Text), len(message.Text)).Scan(&id, &status)
+		utf8.RuneCountInString(message.Text), len(message.Text), string(input), renderedMarkdown).Scan(&id, &status)
 	return id, status, err
 }
 
-func (s *Store) MarkSent(ctx context.Context, id int64) error {
+func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string, response telegram.Result) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -78,10 +84,11 @@ func (s *Store) MarkSent(ctx context.Context, id int64) error {
 	var sentAt time.Time
 	err = tx.QueryRow(ctx, `
 		UPDATE conversions
-		SET status='sent', sent_at=now(), failed_at=NULL, error_code=NULL
+		SET status='sent', sent_at=now(), failed_at=NULL, error_code=NULL,
+			rendered_markdown=$2, telegram_response=$3
 		WHERE id=$1 AND status='received'
 		RETURNING telegram_user_id, character_count, byte_count, sent_at
-	`, id).Scan(&userID, &characters, &bytes, &sentAt)
+	`, id, renderedMarkdown, nullableJSON(response)).Scan(&userID, &characters, &bytes, &sentAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return tx.Commit(ctx)
 	}
@@ -105,12 +112,34 @@ func (s *Store) MarkSent(ctx context.Context, id int64) error {
 	return tx.Commit(ctx)
 }
 
-func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode string) error {
+func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode string, response telegram.Result) error {
 	_, err := s.pool.Exec(ctx, `
-		UPDATE conversions SET status='failed', failed_at=now(), error_code=$2
+		UPDATE conversions SET status='failed', failed_at=now(), error_code=$2,
+			telegram_response=$3
 		WHERE id=$1 AND status='received'
-	`, id, errorCode)
+	`, id, errorCode, nullableJSON(response))
 	return err
+}
+
+func nullableJSON(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	if json.Valid(raw) {
+		return string(raw)
+	}
+	encoded, _ := json.Marshal(map[string]string{"raw": string(raw)})
+	return string(encoded)
+}
+
+func encodeTelegramInput(message telegram.Message) ([]byte, error) {
+	if len(message.RawMessages) == 0 {
+		return json.Marshal(message)
+	}
+	return json.Marshal(struct {
+		Messages []json.RawMessage `json:"messages"`
+		Combined telegram.Message  `json:"combined"`
+	}{Messages: message.RawMessages, Combined: message})
 }
 
 func (s *Store) Offset(ctx context.Context) (int64, error) {

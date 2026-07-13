@@ -7,7 +7,9 @@ Keep makeitMD minimal, private by default, and production-minded.
 - English only.
 - `/start` is the only command.
 - No buttons, menus, settings, AI, or custom Markdown parser.
-- Accept text only in private chats and pass it unchanged to Bot API 10.1 `sendRichMessage` as Rich Markdown.
+- Accept text only in private chats. Pass plain source unchanged; when a Telegram
+  client has consumed formatting into `Message.entities`, deterministically
+  restore only those entity ranges before calling Bot API 10.1 `sendRichMessage`.
 - Never add user-facing statistics unless explicitly requested.
 
 ## Data And Security
@@ -16,6 +18,8 @@ Keep makeitMD minimal, private by default, and production-minded.
 - Use the shared `core-postgres` database with `search_path=makeitmd,core`.
 - Call `core.touch('makeitmd', ...)` before domain writes so `core.person` exists.
 - Store source text and delivery state in `makeitmd.conversions`.
+- Keep retention-bound Telegram input entities, rendered outbound Markdown, and
+  the API result in the conversion row for operator-only transport debugging.
 - Derive private per-user statistics from `makeitmd.user_stats`.
 - Never put conversion text in application logs or shared `core.*` identity tables.
 - Treat conversion rows as private user content and document retention changes explicitly.

@@ -20,7 +20,7 @@ type fakeStore struct {
 func (s *fakeStore) Offset(context.Context) (int64, error)      { return 0, nil }
 func (s *fakeStore) AdvanceOffset(context.Context, int64) error { return nil }
 func (s *fakeStore) Touch(context.Context, telegram.User) error { s.touched++; return nil }
-func (s *fakeStore) CreateConversion(context.Context, int64, telegram.Message) (int64, db.ConversionStatus, error) {
+func (s *fakeStore) CreateConversion(context.Context, int64, telegram.Message, string) (int64, db.ConversionStatus, error) {
 	s.created++
 	status := s.status
 	if status == "" {
@@ -28,8 +28,14 @@ func (s *fakeStore) CreateConversion(context.Context, int64, telegram.Message) (
 	}
 	return 9, status, nil
 }
-func (s *fakeStore) MarkSent(context.Context, int64) error           { s.sent++; return nil }
-func (s *fakeStore) MarkFailed(context.Context, int64, string) error { s.failed++; return nil }
+func (s *fakeStore) MarkSent(context.Context, int64, string, telegram.Result) error {
+	s.sent++
+	return nil
+}
+func (s *fakeStore) MarkFailed(context.Context, int64, string, telegram.Result) error {
+	s.failed++
+	return nil
+}
 
 type fakeTelegram struct {
 	textErr, richErr error
@@ -43,9 +49,9 @@ func (f *fakeTelegram) SendText(_ context.Context, _ int64, text string) error {
 	f.texts = append(f.texts, text)
 	return f.textErr
 }
-func (f *fakeTelegram) SendRichMarkdown(_ context.Context, _ int64, text string) error {
+func (f *fakeTelegram) SendRichMarkdown(_ context.Context, _ int64, text string) (telegram.Result, error) {
 	f.rich = append(f.rich, text)
-	return f.richErr
+	return telegram.Result(`{"message_id":99}`), f.richErr
 }
 
 func testUpdate(text string) telegram.Update {
@@ -87,6 +93,19 @@ func TestMarkdownIsStoredThenSentUnchanged(t *testing.T) {
 	}
 }
 
+func TestConsumedTelegramEntitiesAreRestored(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := testUpdate("styled text")
+	update.Message.Entities = []telegram.MessageEntity{{Type: "bold", Offset: 0, Length: 6}}
+	if err := newTestBot(client, store).handle(context.Background(), update); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := client.rich[0], "<b>styled</b> text"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
 func TestAlreadySentConversionIsNotDuplicated(t *testing.T) {
 	client := &fakeTelegram{}
 	store := &fakeStore{status: db.ConversionSent}
@@ -121,6 +140,18 @@ func TestGroupTextUpdatesJoinsTelegramPasteChunks(t *testing.T) {
 	}
 	if got, want := grouped.Message.Text, "# Project\nfirst part\nsecond part"; got != want {
 		t.Fatalf("text=%q want=%q", got, want)
+	}
+}
+
+func TestGroupTextUpdatesRebasesEntityOffsets(t *testing.T) {
+	updates := []telegram.Update{
+		testUpdateWithIDs(10, 20, 100, "😀 one"),
+		testUpdateWithIDs(11, 21, 100, "two"),
+	}
+	updates[1].Message.Entities = []telegram.MessageEntity{{Type: "bold", Offset: 0, Length: 3}}
+	grouped, _ := groupTextUpdates(updates, 0)
+	if got, want := grouped.Message.Entities[0].Offset, 7; got != want {
+		t.Fatalf("offset=%d want=%d", got, want)
 	}
 }
 

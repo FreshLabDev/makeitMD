@@ -28,16 +28,16 @@ type Store interface {
 	Offset(context.Context) (int64, error)
 	AdvanceOffset(context.Context, int64) error
 	Touch(context.Context, telegram.User) error
-	CreateConversion(context.Context, int64, telegram.Message) (int64, db.ConversionStatus, error)
-	MarkSent(context.Context, int64) error
-	MarkFailed(context.Context, int64, string) error
+	CreateConversion(context.Context, int64, telegram.Message, string) (int64, db.ConversionStatus, error)
+	MarkSent(context.Context, int64, string, telegram.Result) error
+	MarkFailed(context.Context, int64, string, telegram.Result) error
 }
 
 type Telegram interface {
 	SetStartCommand(context.Context) error
 	GetUpdates(context.Context, int64) ([]telegram.Update, error)
 	SendText(context.Context, int64, string) error
-	SendRichMarkdown(context.Context, int64, string) error
+	SendRichMarkdown(context.Context, int64, string) (telegram.Result, error)
 }
 
 type Bot struct {
@@ -151,7 +151,8 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 	if strings.HasPrefix(message.Text, "/") {
 		return nil
 	}
-	conversionID, status, err := b.store.CreateConversion(ctx, update.UpdateID, *message)
+	renderedMarkdown := richmarkdown.RestoreEntities(message.Text, message.Entities)
+	conversionID, status, err := b.store.CreateConversion(ctx, update.UpdateID, *message, renderedMarkdown)
 	if err != nil {
 		return err
 	}
@@ -161,16 +162,18 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 	case db.ConversionFailed:
 		return b.telegram.SendText(ctx, message.Chat.ID, errorText)
 	}
-	if err := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, message.Text); err != nil {
+	response, err := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, renderedMarkdown)
+	if err != nil {
 		var apiErr *telegram.APIError
 		if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusTooManyRequests {
 			metrics.TelegramRateLimit.Inc()
 		}
 		if errors.As(err, &apiErr) && apiErr.ErrorCode == 400 {
-			normalized := richmarkdown.NormalizeFallback(message.Text)
-			if normalized != message.Text {
-				if retryErr := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, normalized); retryErr == nil {
-					if markErr := b.store.MarkSent(ctx, conversionID); markErr != nil {
+			normalized := richmarkdown.NormalizeFallback(renderedMarkdown)
+			if normalized != renderedMarkdown {
+				retryResponse, retryErr := b.telegram.SendRichMarkdown(ctx, message.Chat.ID, normalized)
+				if retryErr == nil {
+					if markErr := b.store.MarkSent(ctx, conversionID, normalized, retryResponse); markErr != nil {
 						return markErr
 					}
 					metrics.ConversionsNormalized.Inc()
@@ -178,9 +181,14 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 					return nil
 				} else if !isBadRequest(retryErr) {
 					return retryErr
+				} else {
+					response = apiResponse(retryErr)
 				}
 			}
-			if markErr := b.store.MarkFailed(ctx, conversionID, "telegram_bad_request"); markErr != nil {
+			if len(response) == 0 {
+				response = apiResponse(err)
+			}
+			if markErr := b.store.MarkFailed(ctx, conversionID, "telegram_bad_request", response); markErr != nil {
 				return markErr
 			}
 			metrics.ConversionsFailed.Inc()
@@ -188,10 +196,18 @@ func (b *Bot) handle(ctx context.Context, update telegram.Update) error {
 		}
 		return err
 	}
-	if err := b.store.MarkSent(ctx, conversionID); err != nil {
+	if err := b.store.MarkSent(ctx, conversionID, renderedMarkdown, response); err != nil {
 		return err
 	}
 	metrics.ConversionsSent.Inc()
+	return nil
+}
+
+func apiResponse(err error) telegram.Result {
+	var apiErr *telegram.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.Response
+	}
 	return nil
 }
 
@@ -215,6 +231,8 @@ func groupTextUpdates(updates []telegram.Update, start int) (telegram.Update, in
 		return first, start
 	}
 	combined := *first.Message
+	combined.Entities = append([]telegram.MessageEntity(nil), first.Message.Entities...)
+	combined.RawMessages = append([]telegram.Result(nil), first.Message.RawMessages...)
 	last := start
 	for next := start + 1; next < len(updates); next++ {
 		candidate := updates[next].Message
@@ -222,11 +240,29 @@ func groupTextUpdates(updates []telegram.Update, start int) (telegram.Update, in
 		if !samePaste(previous, candidate) {
 			break
 		}
+		offset := utf16Length(combined.Text) + 1
 		combined.Text += "\n" + candidate.Text
+		combined.RawMessages = append(combined.RawMessages, candidate.RawMessages...)
+		for _, entity := range candidate.Entities {
+			entity.Offset += offset
+			combined.Entities = append(combined.Entities, entity)
+		}
 		last = next
 	}
 	first.Message = &combined
 	return first, last
+}
+
+func utf16Length(text string) int {
+	length := 0
+	for _, r := range text {
+		if r > 0xffff {
+			length += 2
+		} else {
+			length++
+		}
+	}
+	return length
 }
 
 func batchableMessage(message *telegram.Message) bool {

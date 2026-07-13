@@ -6,6 +6,13 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
+### Fixed
+
+- Restored formatting consumed by Telegram clients from UTF-16 `Message.entities`
+  before sending Rich Markdown, including entities across joined paste chunks.
+- Added retention-bound operator audit fields for the Telegram input, actual
+  outbound Markdown, and raw `sendRichMessage` result.
+
 ## v0.1.0 - 2026-07-13
 
 First public release. Promoted from `v0.1.0-alpha.1` after production

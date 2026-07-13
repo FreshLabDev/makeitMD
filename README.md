@@ -100,8 +100,9 @@ updates do not resend conversions already marked `sent`.
 Global Telegram identity and presence live in `core.person` and
 `core.presence`. Private makeitMD data lives in the isolated `makeitmd` schema:
 
-- `makeitmd.conversions` — exact source, Telegram identifiers, delivery state,
-  character count, and byte count.
+- `makeitmd.conversions` — exact decoded source, raw input message and entities,
+  actual outbound Markdown, raw Telegram result, delivery state, character
+  count, and byte count.
 - `makeitmd.user_stats` — lifetime per-user conversion totals independent of
   raw-text retention.
 - `makeitmd.runtime_state` — durable Telegram update offset.

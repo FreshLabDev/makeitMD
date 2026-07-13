@@ -63,13 +63,15 @@ func (c *Client) SendText(ctx context.Context, chatID int64, text string) error 
 	}, nil)
 }
 
-func (c *Client) SendRichMarkdown(ctx context.Context, chatID int64, markdown string) error {
-	return c.post(ctx, "sendRichMessage", map[string]any{
+func (c *Client) SendRichMarkdown(ctx context.Context, chatID int64, markdown string) (Result, error) {
+	var result Result
+	err := c.post(ctx, "sendRichMessage", map[string]any{
 		"chat_id": chatID,
 		"rich_message": map[string]any{
 			"markdown": markdown,
 		},
-	}, nil)
+	}, &result)
+	return result, err
 }
 
 func (c *Client) get(ctx context.Context, method string, values url.Values, out any, timeout time.Duration) error {
@@ -162,7 +164,8 @@ func (c *Client) do(method string, req *http.Request, out any) (time.Duration, e
 		return 0, fmt.Errorf("decode telegram %s response: %w", method, err)
 	}
 	if !envelope.OK {
-		apiErr := &APIError{Method: method, StatusCode: response.StatusCode, ErrorCode: envelope.ErrorCode, Description: envelope.Description}
+		raw, _ := json.Marshal(envelope)
+		apiErr := &APIError{Method: method, StatusCode: response.StatusCode, ErrorCode: envelope.ErrorCode, Description: envelope.Description, Response: raw}
 		apiErr.RetryAfter = time.Duration(envelope.Parameters.RetryAfter) * time.Second
 		return apiErr.RetryAfter, apiErr
 	}
@@ -218,6 +221,7 @@ func parseAPIError(method string, statusCode int, body io.Reader) *APIError {
 	return &APIError{
 		Method: method, StatusCode: statusCode, ErrorCode: payload.ErrorCode,
 		Description: description, RetryAfter: time.Duration(payload.Parameters.RetryAfter) * time.Second,
+		Response: append(json.RawMessage(nil), raw...),
 	}
 }
 
