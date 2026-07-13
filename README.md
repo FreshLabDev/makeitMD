@@ -40,8 +40,8 @@ chat and receive Telegram's native rendering immediately.
 
 | Channel | Version | Meaning |
 |:--|:--|:--|
-| Release target | `v0.1.0` | First public release, prepared and awaiting publication |
-| Production | `v0.1.0-rc.1` | Runs as `makeitmd-bot` with healthy DB and Telegram polling |
+| Stable | `v0.1.0` | First public release |
+| Production | `v0.1.0` | Runs as `makeitmd-bot` with healthy DB and Telegram polling |
 
 ## Quick Start
 

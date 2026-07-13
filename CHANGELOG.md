@@ -6,25 +6,10 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
-### Fixed
-
-- Restored formatting consumed by Telegram clients from UTF-16 `Message.entities`
-  before sending Rich Markdown, including entities across joined paste chunks.
-- Added retention-bound operator audit fields for the Telegram input, actual
-  outbound Markdown, and raw `sendRichMessage` result.
-- Preserved inline HTML inside raw HTML tables so bold and italic cells aren't
-  degraded to literal Markdown markers during compatibility fallback.
-- Normalized linked Markdown badge images into ordinary links when Telegram
-  rejects them as unavailable rich-message media.
-- Recorded every fallback request/result pair instead of only the terminal
-  delivery response.
-
 ## v0.1.0 - 2026-07-13
 
-First public release. Promoted from `v0.1.0-alpha.1` after production
-verification on WS04: Telegram long polling remained fresh, PostgreSQL and
-container health checks stayed green, and the scoped audit reported no errors
-or warnings.
+First stable public release, promoted after three production release candidates
+and live verification on WS04.
 
 ### Highlights
 
@@ -46,6 +31,12 @@ or warnings.
 - Inputs rejected because GitHub README layout HTML embeds badge images inside
   paragraphs receive one deterministic compatibility retry while the exact
   original source remains stored for audit.
+- Restores formatting consumed by Telegram clients from UTF-16
+  `Message.entities`, including entities across joined paste chunks.
+- Preserves inline HTML formatting inside tables and converts unsupported linked
+  badge images into ordinary links during compatibility fallback.
+- Keeps retention-bound operator traces for raw input, outbound Markdown, and
+  every Telegram delivery result.
 
 ### Operations
 
