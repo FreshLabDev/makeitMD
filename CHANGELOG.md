@@ -27,6 +27,14 @@ against a Telegram server that cannot render Markdown for it.
   used to add a null for every field the client models and the message did not
   have; `telegram_input.combined` is now the message and nothing else.
 
+### Security
+
+- The Go floor moves to 1.26.6 (build image included) and `golang.org/x/text` to v0.39.0. Eight
+  advisories were outstanding, two of them reachable: one from every polling
+  loop through `net/http`, one from opening the database through pgx. Nothing
+  had run govulncheck here since July, so the first CI run in two months found
+  them all at once.
+
 ### Added
 
 - A preflight at startup. makeitMD names `sendRichMessage` as the method it
