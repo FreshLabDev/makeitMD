@@ -46,7 +46,7 @@ type fakeTelegram struct {
 
 func (f *fakeTelegram) SetMyCommands(context.Context, []tg.BotCommand) error        { return nil }
 func (f *fakeTelegram) GetUpdates(context.Context, int64, int) ([]tg.Update, error) { return nil, nil }
-func (f *fakeTelegram) SendMessage(_ context.Context, _ int64, text string, _ *tg.InlineKeyboardMarkup) (tg.Message, error) {
+func (f *fakeTelegram) SendPlainText(_ context.Context, _ int64, text string) (tg.Message, error) {
 	f.texts = append(f.texts, text)
 	return tg.Message{}, f.textErr
 }

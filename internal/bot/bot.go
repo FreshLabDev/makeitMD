@@ -40,7 +40,7 @@ type Store interface {
 type Telegram interface {
 	SetMyCommands(context.Context, []tg.BotCommand) error
 	GetUpdates(context.Context, int64, int) ([]tg.Update, error)
-	SendMessage(context.Context, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
+	SendPlainText(context.Context, int64, string) (tg.Message, error)
 	SendRichMarkdown(context.Context, int64, string, *tg.InlineKeyboardMarkup, ...tg.RichOption) (tg.Message, error)
 }
 
@@ -225,11 +225,12 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	return nil
 }
 
-// sendText delivers one of this bot's own fixed strings. They are sent as
-// HTML, so they must stay free of HTML metacharacters -- see startText and
-// errorText, which are the only two.
+// sendText delivers one of this bot's own fixed strings with no parse mode.
+// One of them is the message a user gets when their Markdown failed to render;
+// sending it as HTML would make a stray angle bracket in that sentence fail
+// the delivery too, and the person would get nothing at all.
 func (b *Bot) sendText(ctx context.Context, chatID int64, text string) error {
-	_, err := b.telegram.SendMessage(ctx, chatID, text, nil)
+	_, err := b.telegram.SendPlainText(ctx, chatID, text)
 	return err
 }
 

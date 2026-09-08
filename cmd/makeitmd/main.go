@@ -56,11 +56,6 @@ func run() error {
 		// Only messages: makeitMD has no buttons and no group presence.
 		tg.WithAllowedUpdates("message"),
 		tg.WithLogger(log),
-		tg.WithObserver(func(e tg.Event) {
-			if e.Status == http.StatusTooManyRequests {
-				metrics.TelegramRateLimit.Inc()
-			}
-		}),
 	)
 	// Rendering Markdown is the whole bot, and it needs sendRichMessage. A Bot
 	// API server without it would leave makeitMD answering nothing at all, so

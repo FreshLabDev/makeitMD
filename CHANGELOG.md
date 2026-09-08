@@ -6,6 +6,27 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.1-alpha.3 - 2026-09-08
+
+Review fixes, all of them in how failures are handled.
+
+### Fixed
+
+- The bot's own fixed strings are sent with no parse mode. One of them is the
+  message a person gets when their Markdown failed to render; as HTML, a stray
+  angle bracket in that sentence would fail its own delivery, and the person
+  would get nothing at all.
+- `makeitmd_telegram_rate_limits_total` counts what it says again. It is
+  documented as requests still limited after a retry, and a second counter had
+  been added on every HTTP attempt, including `getUpdates` polls that never
+  touched it before.
+- Through the client: an `ok=false` answer carried on a 2xx is an API error
+  again, so the retry with normalized Markdown, the failure record and the
+  reply to the user all happen instead of the conversion silently stalling as
+  `received`; the startup preflight waits through a booting server rather than
+  exiting on its first 502; and the bot token can no longer reach a log line or
+  the conversion record through an error body echoed by a proxy.
+
 ## v0.1.1-alpha.1 - 2026-09-08
 
 An internal change with one visible consequence: makeitMD now refuses to start
