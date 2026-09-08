@@ -6,6 +6,40 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.1-alpha.1 - 2026-09-08
+
+An internal change with one visible consequence: makeitMD now refuses to start
+against a Telegram server that cannot render Markdown for it.
+
+### Changed
+
+- Telegram goes through `github.com/FreshLabDev/tg`, the client shared by the
+  bot family, and `internal/telegram` is gone. The transport was the same code
+  three bots each carried, and the copies had drifted. What makeitMD needs and
+  the others do not -- the raw payloads it stores, Telegram's own entity
+  detection, message entities -- became part of the shared client rather than
+  a reason to keep a private one.
+- Domain types moved out of the transport package: `Result` and
+  `DeliveryAttempt` now live in `internal/db`, which is what they describe.
+  A paste stitched from several Telegram messages is its own type in
+  `internal/bot`, instead of an extra field on a protocol struct.
+- Conversion records store a message the way Telegram sends it. Re-encoding
+  used to add a null for every field the client models and the message did not
+  have; `telegram_input.combined` is now the message and nothing else.
+
+### Added
+
+- A preflight at startup. makeitMD names `sendRichMessage` as the method it
+  cannot work without and does not start when the Bot API server lacks it. A
+  server behind the bot answers `404 method not found` to every rich message,
+  which used to mean a bot that polled happily and answered nothing.
+
+### Operations
+
+- No configuration changes. The bot now fails fast on a stale Bot API server
+  instead of running mute, so a first start after a server downgrade will
+  crash-loop with the missing method named in the log.
+
 ## v0.1.0 - 2026-07-13
 
 First stable public release, promoted after three production release candidates

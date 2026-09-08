@@ -17,7 +17,7 @@ import (
 	"github.com/FreshLabDev/makeitMD/internal/db"
 	"github.com/FreshLabDev/makeitMD/internal/health"
 	"github.com/FreshLabDev/makeitMD/internal/metrics"
-	"github.com/FreshLabDev/makeitMD/internal/telegram"
+	"github.com/FreshLabDev/tg"
 )
 
 var (
@@ -52,7 +52,26 @@ func run() error {
 			return err
 		}
 	}
-	service := bot.New(telegram.NewClient(cfg.TelegramBotToken), data, log)
+	client := tg.New(cfg.TelegramBotToken,
+		// Only messages: makeitMD has no buttons and no group presence.
+		tg.WithAllowedUpdates("message"),
+		tg.WithLogger(log),
+		tg.WithObserver(func(e tg.Event) {
+			if e.Status == http.StatusTooManyRequests {
+				metrics.TelegramRateLimit.Inc()
+			}
+		}),
+	)
+	// Rendering Markdown is the whole bot, and it needs sendRichMessage. A Bot
+	// API server without it would leave makeitMD answering nothing at all, so
+	// it is a startup failure rather than a surprise on the first paste.
+	me, err := client.Preflight(ctx, tg.Needs{Methods: []string{"sendRichMessage"}, Wait: 30 * time.Second})
+	if err != nil {
+		return err
+	}
+	log.Info("telegram ready", "username", me.Username, "bot_api", tg.BotAPI)
+
+	service := bot.New(client, data, log)
 	startedAt := time.Now()
 	mux := http.NewServeMux()
 	mux.Handle("GET /healthz", health.New(data, service.LastPoll, startedAt, health.Build{Version: version, Commit: commit, Date: date}, log))

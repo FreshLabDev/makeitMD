@@ -14,6 +14,16 @@ Keep makeitMD minimal, private by default, and production-minded.
 
 ## Data And Security
 
+- Telegram goes through `github.com/FreshLabDev/tg`, the client shared by the
+  bot family. makeitMD keeps no private HTTP client: transport, retries, token
+  redaction and rich messages live there. Raw Telegram payloads that the
+  conversion record keeps come from `Message.Raw` and `APIError.Response`.
+- `Preflight` runs before the bot starts and requires `sendRichMessage`.
+  Rendering Markdown is the whole bot: a server without that method would
+  leave it answering nothing at all.
+- Rich Markdown is sent with entity detection on (`tg.WithEntityDetection`).
+  A person wrote this Markdown, and a bare URL in it is meant to become a link
+  -- unlike the generated text the other bots send.
 - Never log the bot token or full Telegram API URLs.
 - Use the shared `core-postgres` database with `search_path=makeitmd,core`.
 - Call `core.touch('makeitmd', ...)` before domain writes so `core.person` exists.

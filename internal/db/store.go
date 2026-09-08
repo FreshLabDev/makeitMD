@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/FreshLabDev/makeitMD/internal/telegram"
+	"github.com/FreshLabDev/tg"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -45,7 +45,7 @@ func Connect(ctx context.Context, databaseURL string) (*Store, error) {
 
 func (s *Store) Close() { s.pool.Close() }
 
-func (s *Store) Touch(ctx context.Context, user telegram.User) error {
+func (s *Store) Touch(ctx context.Context, user tg.User) error {
 	_, err := s.pool.Exec(ctx,
 		`SELECT core.touch($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		"makeitmd", user.ID, nullString(user.Username), nullString(user.FirstName),
@@ -53,10 +53,10 @@ func (s *Store) Touch(ctx context.Context, user telegram.User) error {
 	return err
 }
 
-func (s *Store) CreateConversion(ctx context.Context, updateID int64, message telegram.Message, renderedMarkdown string) (int64, ConversionStatus, error) {
+func (s *Store) CreateConversion(ctx context.Context, updateID int64, message tg.Message, raws []json.RawMessage, renderedMarkdown string) (int64, ConversionStatus, error) {
 	var id int64
 	var status ConversionStatus
-	input, err := encodeTelegramInput(message)
+	input, err := encodeTelegramInput(message, raws)
 	if err != nil {
 		return 0, "", fmt.Errorf("encode telegram input: %w", err)
 	}
@@ -73,7 +73,7 @@ func (s *Store) CreateConversion(ctx context.Context, updateID int64, message te
 	return id, status, err
 }
 
-func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string, response telegram.Result, attempts []telegram.DeliveryAttempt) error {
+func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string, response Result, attempts []DeliveryAttempt) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (s *Store) MarkSent(ctx context.Context, id int64, renderedMarkdown string,
 	return tx.Commit(ctx)
 }
 
-func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode, renderedMarkdown string, response telegram.Result, attempts []telegram.DeliveryAttempt) error {
+func (s *Store) MarkFailed(ctx context.Context, id int64, errorCode, renderedMarkdown string, response Result, attempts []DeliveryAttempt) error {
 	_, err := s.pool.Exec(ctx, `
 		UPDATE conversions SET status='failed', failed_at=now(), error_code=$2,
 			rendered_markdown=$3, telegram_response=$4, telegram_attempts=$5
@@ -140,14 +140,17 @@ func nullableJSON(raw json.RawMessage) any {
 	return string(encoded)
 }
 
-func encodeTelegramInput(message telegram.Message) ([]byte, error) {
-	if len(message.RawMessages) == 0 {
+// encodeTelegramInput stores what arrived. raws holds each original Telegram
+// message; combined is the single message they were stitched into, which has
+// no original of its own.
+func encodeTelegramInput(message tg.Message, raws []json.RawMessage) ([]byte, error) {
+	if len(raws) == 0 {
 		return json.Marshal(message)
 	}
 	return json.Marshal(struct {
 		Messages []json.RawMessage `json:"messages"`
-		Combined telegram.Message  `json:"combined"`
-	}{Messages: message.RawMessages, Combined: message})
+		Combined tg.Message        `json:"combined"`
+	}{Messages: raws, Combined: message})
 }
 
 func (s *Store) Offset(ctx context.Context) (int64, error) {

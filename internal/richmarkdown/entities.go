@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/FreshLabDev/makeitMD/internal/telegram"
+	"github.com/FreshLabDev/tg"
 )
 
 type entityMarker struct {
@@ -20,7 +20,7 @@ type entityMarker struct {
 // RestoreEntities reconstructs formatting consumed by the Telegram client
 // before the Bot API delivered Message.text. Entity offsets are UTF-16 code
 // units, not bytes or runes.
-func RestoreEntities(text string, entities []telegram.MessageEntity) string {
+func RestoreEntities(text string, entities []tg.MessageEntity) string {
 	if text == "" || len(entities) == 0 {
 		return text
 	}
@@ -113,7 +113,7 @@ func utf16Boundaries(text string) map[int]int {
 	return boundaries
 }
 
-func entityDelimiters(content string, entity telegram.MessageEntity) (string, string) {
+func entityDelimiters(content string, entity tg.MessageEntity) (string, string) {
 	switch entity.Type {
 	case "bold":
 		return "<b>", "</b>"
