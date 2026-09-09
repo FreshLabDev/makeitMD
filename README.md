@@ -138,6 +138,22 @@ Raw `sent` and `failed` conversions expire after 90 days by default. Unresolved
 | `BUILD_COMMIT` | no | `none` | Source revision |
 | `BUILD_DATE` | no | `unknown` | UTC build timestamp |
 
+## Production
+
+`deploy/ws04/compose.yaml` is the production stack. It pulls the image the
+release workflow published to GHCR and never builds one:
+
+```sh
+# in the stack directory, alongside .env
+MAKEITMD_IMAGE=ghcr.io/freshlabdev/makeitmd@sha256:<digest> docker compose up -d
+```
+
+Pin `MAKEITMD_IMAGE` by digest rather than tag. A digest names one exact build,
+so a rollback is a one-line change with nothing to rebuild, and `docker inspect`
+on the running container answers which commit it came from. `BUILD_VERSION` /
+`BUILD_COMMIT` / `BUILD_DATE` are baked in by the release workflow; they only
+need setting for a local build.
+
 ## Development
 
 ```sh
