@@ -292,10 +292,16 @@ func TestLanguageScreenIsTheFamilyPicker(t *testing.T) {
 	if len(back) != 1 || back[0].Text != i18n.T("en", "btn.back") || back[0].CallbackData != panelRoot {
 		t.Fatalf("the nav row is one word: %+v", back)
 	}
-	// Close is a group-only idea, and this bot has no group panel to close.
-	for _, button := range flatten(view.markup) {
-		if button.Style == tg.StyleDanger || strings.Contains(button.Text, i18n.T("en", "btn.close")) {
-			t.Fatalf("a private panel has nothing to close: %+v", button)
+	// Close is a group-only idea, and this bot has no group panel to close, so
+	// the screen is sixteen languages plus the two rows already checked above
+	// and nothing else -- counting them is what would catch one appearing.
+	buttons := flatten(view.markup)
+	if len(buttons) != len(i18n.LANGUAGE_OPTIONS)+2 {
+		t.Fatalf("a private panel has nothing to close: %+v", buttons)
+	}
+	for _, button := range buttons {
+		if button.Style == tg.StyleDanger {
+			t.Fatalf("nothing here destroys anything: %+v", button)
 		}
 	}
 	// The buttons carry the state, so the body does not repeat it.
