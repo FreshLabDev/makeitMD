@@ -6,6 +6,13 @@ All notable makeitMD changes are documented here.
 
 Use this section for changes that are merged but not released yet.
 
+### Changed
+
+- `github.com/FreshLabDev/tg` moves to `v0.0.1-alpha.7`. It carries one fix:
+  a preflight probe is marked as a probe, so the `404 method not found` it
+  expects stops being counted and logged as a transport failure. All four bots
+  on the shared client now run the same version.
+
 ## v0.1.1-alpha.3 - 2026-09-08
 
 Review fixes, all of them in how failures are handled.
