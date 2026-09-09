@@ -13,6 +13,13 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.2.0-alpha.1 - 2026-09-09
+
+makeitMD gets a panel. The product boundary moved deliberately: /start now opens
+two tabs instead of answering with a sentence and no way forward. Still no
+settings.
+
+
 ### Changed
 
 - **`/start` now opens a panel instead of answering with one sentence.** Two
