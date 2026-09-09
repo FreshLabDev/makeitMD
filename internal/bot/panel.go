@@ -109,21 +109,15 @@ func (b *Bot) screenFor(data string) screen {
 	}
 }
 
-// buildLabel is the version line of the About card. The commit is what tells
-// two builds of one version apart, which is the question anyone reading this
-// line is actually asking. The placeholders a bare `go build` leaves behind
-// answer nothing, so they are dropped rather than shown as "none".
+// buildLabel is the version line of the About card, and the version is all of
+// it. Every bot in the family states its version the same way, and a commit
+// hash appended here would make this one card read differently from the rest
+// while answering a question its readers are not asking. The commit is still
+// on the startup log line and in /health, where whoever needs it is looking.
 func buildLabel(info build.Info) string {
 	version := strings.TrimSpace(info.Version)
 	if version == "" {
-		version = "dev"
+		return "dev"
 	}
-	commit := strings.TrimSpace(info.Commit)
-	if commit == "" || commit == "none" {
-		return version
-	}
-	if len(commit) > 7 {
-		commit = commit[:7]
-	}
-	return version + " · " + commit
+	return version
 }

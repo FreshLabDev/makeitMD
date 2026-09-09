@@ -42,10 +42,10 @@ func TestAboutCardCarriesTheRunningBuild(t *testing.T) {
 		t.Fatalf("answered=%v edits=%d", client.answered, len(client.edits))
 	}
 	card := client.edits[0].text
-	// The version and the short commit come from the same build info /healthz
-	// reports, so the card cannot claim a build that is not running.
+	// The version comes from the same build info /healthz reports, so the card
+	// cannot claim a build that is not running.
 	for _, want := range []string{
-		"<b>makeitMD</b> · <i>v9.9.9 · abcdef1</i>",
+		"<b>makeitMD</b> · <i>v9.9.9</i>",
 		"Rendering · Telegram Bot API " + tg.BotAPI,
 		`Source · <a href="https://github.com/FreshLabDev/makeitMD">FreshLabDev/makeitMD</a> · Apache-2.0`,
 		`Admin · <a href="https://t.me/amtiyo">@amtiyo</a>`,
@@ -153,12 +153,18 @@ func TestGroupTextIsNotRendered(t *testing.T) {
 	}
 }
 
-func TestBuildLabelDropsUnstampedPlaceholders(t *testing.T) {
-	if got := buildLabel(build.Info{Version: "dev", Commit: "none"}); got != "dev" {
+// The About card states the version and nothing else, the same as every other
+// bot in the family. A commit hash here made this one card read differently.
+func TestAboutStatesTheVersionAndNoCommit(t *testing.T) {
+	if got := buildLabel(build.Info{Version: "", Commit: "none"}); got != "dev" {
 		t.Fatalf("label=%q", got)
 	}
-	if got := buildLabel(build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}); got != "v1.2.3 · 0123456" {
+	if got := buildLabel(build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}); got != "v1.2.3" {
 		t.Fatalf("label=%q", got)
+	}
+	text := aboutScreen(build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}).text
+	if strings.Contains(text, "0123456") {
+		t.Fatalf("about card still carries the commit: %q", text)
 	}
 }
 
