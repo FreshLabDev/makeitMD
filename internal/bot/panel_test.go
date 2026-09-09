@@ -289,7 +289,10 @@ func TestLanguageScreenIsTheFamilyPicker(t *testing.T) {
 		t.Fatalf("Follow Telegram sits alone and unpainted under the grid: %+v", follow)
 	}
 	back := rows[len(rows)-1]
-	if len(back) != 1 || back[0].Text != i18n.T("en", "btn.back") || back[0].CallbackData != panelRoot {
+	// In the screen's own language. Asserting the English here passed only
+	// while "uk" had no translation and fell through to it, so the assertion
+	// would have started lying the moment the locale landed.
+	if len(back) != 1 || back[0].Text != i18n.T("uk", "btn.back") || back[0].CallbackData != panelRoot {
 		t.Fatalf("the nav row is one word: %+v", back)
 	}
 	// Close is a group-only idea, and this bot has no group panel to close, so
