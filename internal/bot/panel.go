@@ -11,14 +11,30 @@ import (
 	"github.com/FreshLabDev/makeitMD/internal/i18n"
 )
 
-// The panel is deliberately two screens wide and one screen deep. makeitMD has
-// nothing to configure, so there is no settings screen and no state a button
-// could change: "How it works" is what a first-time user needs, "About" is what
-// an operator needs, and everything else the bot does is done by pasting text.
+// The panel is three screens wide and one screen deep. makeitMD still has
+// nothing to configure: "How it works" is what a first-time user needs, "About"
+// is what an operator needs, and everything else the bot does is done by
+// pasting text. The one thing a button here changes is the language, and that
+// is not this bot's state either -- it lives in the hub the whole family
+// shares, so choosing it once chooses it everywhere.
 const (
 	panelRoot  = "panel:root"
 	panelHow   = "panel:how"
 	panelAbout = "panel:about"
+	panelLang  = "panel:lang"
+
+	// panelLangPick prefixes one language button. panelLangFollow withdraws the
+	// choice instead of making one; "follow" is not a language code, so the two
+	// can never collide.
+	panelLangPick   = "panel:lang:"
+	panelLangFollow = "panel:lang:follow"
+)
+
+// Every option of a set carries a glyph, chosen or not, so the column has one
+// left edge and "not chosen" reads as a state rather than as an absence.
+const (
+	markChosen    = "◉ "
+	markNotChosen = "◎ "
 )
 
 // Facts the panel states about itself. They read the same in every language, so
@@ -69,6 +85,12 @@ func rootScreen(lang string) screen {
 			// neither. Nothing here destroys anything, so no button is danger.
 			{Text: i18n.T(lang, "btn.how"), CallbackData: panelHow, Style: tg.StylePrimary},
 			{Text: i18n.T(lang, "btn.about"), CallbackData: panelAbout},
+		}, {
+			// The language is a correction, not a first step: it is already
+			// resolved from the shared hub or from the Telegram client before
+			// anybody taps anything. So it sits below the two tabs and takes no
+			// colour -- a second primary would single out neither.
+			{Text: i18n.T(lang, "btn.language"), CallbackData: panelLang},
 		}}},
 	}
 }
@@ -122,6 +144,68 @@ func groupScreen(lang, username string) screen {
 	return view
 }
 
+// languageScreen is the family's picker: the same sixteen languages in the same
+// order with the same labels every sibling bot offers, two per row. The choice
+// is stored in the shared hub, so what this screen sets is not this bot's
+// language but the person's.
+func languageScreen(lang string) screen {
+	options := i18n.LANGUAGE_OPTIONS
+	rows := make([][]tg.InlineKeyboardButton, 0, len(options)/2+2)
+	for i := 0; i < len(options); i += 2 {
+		row := []tg.InlineKeyboardButton{languageButton(options[i], lang)}
+		if i+1 < len(options) {
+			row = append(row, languageButton(options[i+1], lang))
+		}
+		rows = append(rows, row)
+	}
+	// Handing the decision back to Telegram is a different thing from making
+	// one, so it sits under the grid, in no colour, where it cannot be mistaken
+	// for a seventeenth language.
+	rows = append(rows, []tg.InlineKeyboardButton{
+		{Text: i18n.T(lang, "btn.follow_telegram"), CallbackData: panelLangFollow},
+	})
+	rows = append(rows, backRow(lang))
+	// The body says nothing the buttons already say. Which language is current
+	// lives on the buttons; repeating it as a line of text would be one state
+	// kept in two places, and they would disagree the first time one changed.
+	return screen{
+		text:   panelText(i18n.T(lang, "lang.title"), i18n.T(lang, "lang.hint"), ""),
+		markup: &tg.InlineKeyboardMarkup{InlineKeyboard: rows},
+	}
+}
+
+// languageButton paints the current language and nothing else: Success means
+// "this is the state you are in", never "this button acts".
+func languageButton(option i18n.LangOption, lang string) tg.InlineKeyboardButton {
+	button := tg.InlineKeyboardButton{
+		Text:         markNotChosen + option.Label,
+		CallbackData: panelLangPick + option.Code,
+	}
+	if option.Code == lang {
+		button.Text = markChosen + option.Label
+		button.Style = tg.StyleSuccess
+	}
+	return button
+}
+
+// languageChoice reads a tap on the language screen. An empty code with ok is
+// "follow Telegram", which is the choice to stop having one. A code this
+// release does not offer is not a choice at all: it came from a keyboard an
+// older release sent, and lands on the root panel like any other stale button.
+func languageChoice(data string) (code string, ok bool) {
+	if data == panelLangFollow {
+		return "", true
+	}
+	if !strings.HasPrefix(data, panelLangPick) {
+		return "", false
+	}
+	code = strings.TrimPrefix(data, panelLangPick)
+	if !i18n.IsSupported(code) {
+		return "", false
+	}
+	return code, true
+}
+
 // backKeyboard is the whole navigation vocabulary of this bot. There is no
 // Close button: in a private chat the conversation is the panel, so there is
 // nothing covering anything to close.
@@ -144,6 +228,8 @@ func (b *Bot) screenFor(lang, data string) screen {
 		return howScreen(lang)
 	case panelAbout:
 		return aboutScreen(lang, b.build)
+	case panelLang:
+		return languageScreen(lang)
 	default:
 		return rootScreen(lang)
 	}

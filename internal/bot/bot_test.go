@@ -21,6 +21,11 @@ type fakeStore struct {
 	// lang is what the shared hub answers with; empty means nobody has chosen.
 	lang    string
 	langErr error
+	// set records the language written to the hub, cleared counts withdrawals,
+	// and writeErr is the hub refusing both.
+	set      string
+	cleared  int
+	writeErr error
 }
 
 func (s *fakeStore) Offset(context.Context) (int64, error)      { return 0, nil }
@@ -31,6 +36,21 @@ func (s *fakeStore) EffectiveLanguage(context.Context, int64) (string, bool, err
 		return "", false, s.langErr
 	}
 	return s.lang, s.lang != "", nil
+}
+func (s *fakeStore) SetLanguage(_ context.Context, _ int64, lang string) error {
+	if s.writeErr != nil {
+		return s.writeErr
+	}
+	s.set, s.lang = lang, lang
+	return nil
+}
+func (s *fakeStore) ClearLanguage(context.Context, int64) error {
+	if s.writeErr != nil {
+		return s.writeErr
+	}
+	s.cleared++
+	s.set, s.lang = "", ""
+	return nil
 }
 func (s *fakeStore) CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error) {
 	s.created++

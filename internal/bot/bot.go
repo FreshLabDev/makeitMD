@@ -31,6 +31,8 @@ type Store interface {
 	AdvanceOffset(context.Context, int64) error
 	Touch(context.Context, tg.User) error
 	EffectiveLanguage(context.Context, int64) (string, bool, error)
+	SetLanguage(context.Context, int64, string) error
+	ClearLanguage(context.Context, int64) error
 	CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error)
 	MarkSent(context.Context, int64, string, db.Result, []db.DeliveryAttempt) error
 	MarkFailed(context.Context, int64, string, string, db.Result, []db.DeliveryAttempt) error
@@ -323,8 +325,44 @@ func (b *Bot) handleCallback(ctx context.Context, query *tg.CallbackQuery) error
 	if query.Message.Chat.Type != "private" || query.Message.MessageID == 0 {
 		return nil
 	}
-	view := b.screenFor(b.resolveLang(ctx, query.From), query.Data)
+	// core.touch runs before any language write, so the person exists in core
+	// for the claim to hang off, and so the Telegram hint core stores stays
+	// fresh -- that hint is precisely what "Follow Telegram" falls back to. A
+	// hub that refuses is a warning and not the end of the tap: the panel still
+	// navigates, and a language write that fails reports itself below.
+	if err := b.store.Touch(ctx, query.From); err != nil {
+		b.log.Warn("touch failed", "user_id", query.From.ID, "error", err)
+	}
+	lang := b.resolveLang(ctx, query.From)
+	data := query.Data
+	if code, ok := languageChoice(data); ok {
+		lang = b.chooseLanguage(ctx, query.From, code, lang)
+		data = panelLang
+	}
+	view := b.screenFor(lang, data)
 	return b.telegram.EditMessageText(ctx, query.Message.Chat.ID, query.Message.MessageID, view.text, view.markup)
+}
+
+// chooseLanguage records a tap on the language screen and reports the language
+// the repainted screen must be drawn in. An empty code withdraws the choice, so
+// the answer is asked for again rather than assumed: what wins after that is
+// whatever the hub resolves to next, which is normally the Telegram client.
+// A write the hub refuses leaves the person on the language they already had --
+// repainting in a language that was not stored would claim a change that did
+// not happen, and the next screen would silently disagree.
+func (b *Bot) chooseLanguage(ctx context.Context, user tg.User, code, current string) string {
+	if code == "" {
+		if err := b.store.ClearLanguage(ctx, user.ID); err != nil {
+			b.log.Warn("clear language failed", "user_id", user.ID, "error", err)
+			return current
+		}
+		return b.resolveLang(ctx, user)
+	}
+	if err := b.store.SetLanguage(ctx, user.ID, code); err != nil {
+		b.log.Warn("set language failed", "user_id", user.ID, "error", err)
+		return current
+	}
+	return code
 }
 
 // resolveLang prefers the language stored in the shared core hub -- which the

@@ -17,8 +17,14 @@
  "btn.back": {
   "en": "Back"
  },
+ "btn.follow_telegram": {
+  "en": "Follow Telegram"
+ },
  "btn.how": {
   "en": "How it works"
+ },
+ "btn.language": {
+  "en": "Language"
  },
  "btn.open": {
   "en": "Open {bot}"
@@ -52,6 +58,12 @@
  },
  "how.title": {
   "en": "How it works"
+ },
+ "lang.hint": {
+  "en": "Applies to this bot’s replies, and is shared with the other bots."
+ },
+ "lang.title": {
+  "en": "Language"
  },
  "msg.render_failed": {
   "en": "I couldn’t render that Markdown. Check the syntax and try again."
