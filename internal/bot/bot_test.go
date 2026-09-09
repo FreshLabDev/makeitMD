@@ -11,17 +11,27 @@ import (
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
+	"github.com/FreshLabDev/makeitMD/internal/i18n"
 	"github.com/FreshLabDev/tg"
 )
 
 type fakeStore struct {
 	status                         db.ConversionStatus
 	touched, created, sent, failed int
+	// lang is what the shared hub answers with; empty means nobody has chosen.
+	lang    string
+	langErr error
 }
 
 func (s *fakeStore) Offset(context.Context) (int64, error)      { return 0, nil }
 func (s *fakeStore) AdvanceOffset(context.Context, int64) error { return nil }
 func (s *fakeStore) Touch(context.Context, tg.User) error       { s.touched++; return nil }
+func (s *fakeStore) EffectiveLanguage(context.Context, int64) (string, bool, error) {
+	if s.langErr != nil {
+		return "", false, s.langErr
+	}
+	return s.lang, s.lang != "", nil
+}
 func (s *fakeStore) CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error) {
 	s.created++
 	status := s.status
@@ -62,6 +72,9 @@ func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.Bo
 	name := "none"
 	if scope != nil {
 		name = scope.Type
+		if scope.LanguageCode != "" {
+			name += ":" + scope.LanguageCode
+		}
 	}
 	f.scopes[name] = commands
 	return nil
@@ -168,7 +181,7 @@ func TestBadMarkdownIsMarkedFailedAndExplained(t *testing.T) {
 	if err := newTestBot(client, store).handle(context.Background(), testPaste(testUpdate("**broken"))); err != nil {
 		t.Fatal(err)
 	}
-	if store.failed != 1 || len(client.texts) != 1 || client.texts[0] != errorText {
+	if store.failed != 1 || len(client.texts) != 1 || client.texts[0] != i18n.T("en", "msg.render_failed") {
 		t.Fatalf("client=%+v store=%+v", client, store)
 	}
 }
@@ -255,4 +268,33 @@ func mustUpdate(t *testing.T, raw string) tg.Update {
 		t.Fatal(err)
 	}
 	return update
+}
+
+// The shared hub is the answer when it has one: a person who picked Ukrainian
+// in a sibling bot did not pick it for that bot only. The Telegram client's own
+// language is the fallback, and it survives a hub that is down -- losing the
+// hint there would drop somebody into English for no reason they can see.
+func TestResolvedLanguagePrefersTheSharedChoice(t *testing.T) {
+	store := &fakeStore{}
+	bot := newTestBot(&fakeTelegram{}, store)
+	user := tg.User{ID: 7, LanguageCode: "de-AT"}
+	for _, tc := range []struct {
+		name string
+		lang string
+		err  error
+		hint string
+		want string
+	}{
+		{"the choice made in any bot of the family", "uk", nil, "de-AT", "uk"},
+		{"the Telegram hint when nobody has chosen", "", nil, "de-AT", "de"},
+		{"the Telegram hint when the hub is unreachable", "", errors.New("hub down"), "de-AT", "de"},
+		{"English when there is no usable hint either", "", nil, "klingon", "en"},
+		{"a hub answer this bot cannot render", "pt", nil, "de-AT", "en"},
+	} {
+		store.lang, store.langErr = tc.lang, tc.err
+		user.LanguageCode = tc.hint
+		if got := bot.resolveLang(context.Background(), user); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
 }

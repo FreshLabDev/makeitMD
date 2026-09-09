@@ -16,12 +16,12 @@ import (
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
+	"github.com/FreshLabDev/makeitMD/internal/i18n"
 	"github.com/FreshLabDev/makeitMD/internal/metrics"
 	"github.com/FreshLabDev/makeitMD/internal/richmarkdown"
 )
 
 const (
-	errorText     = "I couldn’t render that Markdown. Check the syntax and try again."
 	chunkDebounce = 700 * time.Millisecond
 	chunkMaxGap   = 2 * time.Second
 )
@@ -30,6 +30,7 @@ type Store interface {
 	Offset(context.Context) (int64, error)
 	AdvanceOffset(context.Context, int64) error
 	Touch(context.Context, tg.User) error
+	EffectiveLanguage(context.Context, int64) (string, bool, error)
 	CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error)
 	MarkSent(context.Context, int64, string, db.Result, []db.DeliveryAttempt) error
 	MarkFailed(context.Context, int64, string, string, db.Result, []db.DeliveryAttempt) error
@@ -51,19 +52,6 @@ type Telegram interface {
 // pollTimeout is the long-poll duration in seconds. The client derives its own
 // HTTP deadline from it.
 const pollTimeout = 50
-
-// privateCommands is the menu in a direct message, which is where the whole bot
-// lives.
-var privateCommands = []tg.BotCommand{{Command: "start", Description: "Open the makeitMD panel"}}
-
-// groupCommands keep one command in groups rather than none. An empty list
-// would be tidier on paper, but somebody who adds makeitMD to a group would
-// then find no menu, no reply and nothing saying why. `IsEphemeral` is what
-// makes a Bot API 10.3 client send the command itself as an ephemeral message,
-// which is both what authorizes the reply and what keeps the whole exchange
-// invisible to everyone except the person who typed it -- so the redirect costs
-// the group no message at all.
-var groupCommands = []tg.BotCommand{{Command: "start", Description: "Open makeitMD privately", IsEphemeral: true}}
 
 // noCommands clears the scope it is published to. It must not be nil: the API
 // takes an empty JSON array, and a nil slice marshals to null.
@@ -94,28 +82,48 @@ func New(client Telegram, data Store, log *slog.Logger, info build.Info, usernam
 	return &Bot{telegram: client, store: data, log: log, build: info, username: username}
 }
 
-// registerCommands publishes one list per scope instead of a single global one.
-// The bot renders Markdown in private chats only, and a global list offers the
-// command everywhere -- including chat types where tapping it does nothing.
-// The default scope is cleared rather than left alone: makeitMD used to publish
-// there, and the two explicit scopes below already cover every chat a bot can
-// be in, so anything still registered on the default is a description nothing
-// reaches. A failure here is logged and not fatal: a bot that renders Markdown
-// without a menu still works.
+// registerCommands publishes one list per scope and per language instead of a
+// single global one in one language.
+//
+// Per scope, because the bot renders Markdown in private chats only and a
+// global list offers the command everywhere -- including chat types where
+// tapping it does nothing. The default scope is cleared rather than left alone:
+// makeitMD used to publish there, and the two explicit scopes already cover
+// every chat a bot can be in, so anything still registered on the default is a
+// description nothing reaches.
+//
+// Per language, because Telegram serves the list matching the client's
+// language: without it the panel would greet a Ukrainian in Ukrainian while the
+// menu that opened it stayed in English. A language nobody has translated yet
+// falls back to English inside i18n.T, which is exactly what Telegram would
+// have done with the language-less list anyway.
+//
+// `IsEphemeral` on the group entry is what makes a Bot API 10.3 client send the
+// command itself as an ephemeral message, which is both what authorizes the
+// reply and what keeps the whole exchange invisible to everyone except the
+// person who typed it -- so the redirect costs the group no message at all.
+// A failure here is logged and not fatal: a bot that renders Markdown without a
+// menu still works.
 func (b *Bot) registerCommands(ctx context.Context) {
-	scopes := []struct {
-		scope    string
-		commands []tg.BotCommand
-	}{
-		{"all_private_chats", privateCommands},
-		{"all_group_chats", groupCommands},
-		{"default", noCommands},
-	}
-	for _, published := range scopes {
-		if err := b.telegram.SetMyCommandsForScope(ctx, published.commands,
-			&tg.BotCommandScope{Type: published.scope}); err != nil {
-			b.log.Warn("set telegram commands failed", "scope", published.scope, "error", err)
+	for _, lang := range append([]string{""}, i18n.Codes()...) {
+		text := lang
+		if text == "" {
+			text = i18n.DefaultLang
 		}
+		b.publishCommands(ctx, "all_private_chats", lang, []tg.BotCommand{
+			{Command: "start", Description: i18n.T(text, "cmd.start", "bot", productName)},
+		})
+		b.publishCommands(ctx, "all_group_chats", lang, []tg.BotCommand{
+			{Command: "start", Description: i18n.T(text, "cmd.start_group", "bot", productName), IsEphemeral: true},
+		})
+	}
+	b.publishCommands(ctx, "default", "", noCommands)
+}
+
+func (b *Bot) publishCommands(ctx context.Context, scope, lang string, commands []tg.BotCommand) {
+	if err := b.telegram.SetMyCommandsForScope(ctx, commands,
+		&tg.BotCommandScope{Type: scope, LanguageCode: lang}); err != nil {
+		b.log.Warn("set telegram commands failed", "scope", scope, "language", lang, "error", err)
 	}
 }
 
@@ -224,7 +232,7 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return err
 	}
 	if isStartCommand(message.Text) {
-		return b.sendScreen(ctx, message.Chat.ID, rootScreen())
+		return b.sendScreen(ctx, message.Chat.ID, rootScreen(b.resolveLang(ctx, *message.From)))
 	}
 	if strings.HasPrefix(message.Text, "/") {
 		return nil
@@ -238,7 +246,7 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	case db.ConversionSent:
 		return nil
 	case db.ConversionFailed:
-		return b.sendText(ctx, message.Chat.ID, errorText)
+		return b.sendText(ctx, message.Chat.ID, b.renderFailedText(ctx, *message.From))
 	}
 	response, err := b.sendRichMarkdown(ctx, message.Chat.ID, renderedMarkdown)
 	attempts := []db.DeliveryAttempt{deliveryAttempt(renderedMarkdown, response, err)}
@@ -272,7 +280,7 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 				return markErr
 			}
 			metrics.ConversionsFailed.Inc()
-			return b.sendText(ctx, message.Chat.ID, errorText)
+			return b.sendText(ctx, message.Chat.ID, b.renderFailedText(ctx, *message.From))
 		}
 		return err
 	}
@@ -294,7 +302,7 @@ func (b *Bot) handleGroupStart(ctx context.Context, message *tg.Message) error {
 	if message.EphemeralMessageID == 0 || !isStartCommand(message.Text) {
 		return nil
 	}
-	view := groupScreen(b.username)
+	view := groupScreen(b.resolveLang(ctx, *message.From), b.username)
 	_, err := b.telegram.SendEphemeralMessage(ctx, message.Chat.ID, message.From.ID,
 		message.EphemeralMessageID, view.text, view.markup)
 	return err
@@ -315,8 +323,38 @@ func (b *Bot) handleCallback(ctx context.Context, query *tg.CallbackQuery) error
 	if query.Message.Chat.Type != "private" || query.Message.MessageID == 0 {
 		return nil
 	}
-	view := b.screenFor(query.Data)
+	view := b.screenFor(b.resolveLang(ctx, query.From), query.Data)
 	return b.telegram.EditMessageText(ctx, query.Message.Chat.ID, query.Message.MessageID, view.text, view.markup)
+}
+
+// resolveLang prefers the language stored in the shared core hub -- which the
+// sibling bots write too, so a choice made in one of them is honoured here --
+// and falls back to what the Telegram client reports about its own interface.
+// The hub may hold any language the family supports; Resolve maps it onto one
+// this bot can render. A hub that cannot be reached is a warning and English,
+// never a panel that fails to open.
+func (b *Bot) resolveLang(ctx context.Context, user tg.User) string {
+	fallback := i18n.Resolve(user.LanguageCode)
+	if user.ID == 0 {
+		return fallback
+	}
+	lang, ok, err := b.store.EffectiveLanguage(ctx, user.ID)
+	if err != nil {
+		b.log.Warn("effective language failed", "user_id", user.ID, "error", err)
+		return fallback
+	}
+	if !ok {
+		return fallback
+	}
+	return i18n.Resolve(lang)
+}
+
+// renderFailedText is the only sentence a person receives that is not part of
+// the panel. The language is resolved on this path rather than for every paste
+// because a conversion that works sends none of our own words at all, and a
+// preference lookup per paste would buy nothing.
+func (b *Bot) renderFailedText(ctx context.Context, user tg.User) string {
+	return i18n.T(b.resolveLang(ctx, user), "msg.render_failed")
 }
 
 // sendScreen posts a panel screen. Unlike the strings below it, panel text is

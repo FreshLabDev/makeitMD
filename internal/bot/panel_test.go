@@ -9,6 +9,7 @@ import (
 	"github.com/FreshLabDev/tg"
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
+	"github.com/FreshLabDev/makeitMD/internal/i18n"
 )
 
 func TestStartOpensThePanel(t *testing.T) {
@@ -24,11 +25,39 @@ func TestStartOpensThePanel(t *testing.T) {
 	if len(buttons) != 2 {
 		t.Fatalf("the panel is exactly two tabs, got %+v", buttons)
 	}
-	if buttons[0].Text != "How it works" || buttons[0].Style != tg.StylePrimary {
+	if buttons[0].Text != i18n.T("en", "btn.how") || buttons[0].Style != tg.StylePrimary {
 		t.Fatalf("the screen's main action must be primary: %+v", buttons[0])
 	}
-	if buttons[1].Text != "About" || buttons[1].Style != "" {
+	if buttons[1].Text != i18n.T("en", "btn.about") || buttons[1].Style != "" {
 		t.Fatalf("only the main action is styled: %+v", buttons[1])
+	}
+}
+
+// Every panel in the family opens with a bold title and an italic line saying
+// what the screen is for. This one used to open with bare prose, which made
+// makeitMD read as a different product from the bot next to it.
+func TestEveryScreenOpensWithATitleAndAHint(t *testing.T) {
+	for name, view := range map[string]screen{
+		"root":  rootScreen("en"),
+		"how":   howScreen("en"),
+		"about": aboutScreen("en", build.Info{Version: "v9.9.9"}),
+		"group": groupScreen("en", "makeitMD_bot"),
+	} {
+		if !strings.HasPrefix(view.text, "<b>") {
+			t.Errorf("%s does not open with a title: %q", name, view.text)
+		}
+		// The About card states the version where the others state a hint, and
+		// is the one screen allowed to.
+		if name != "about" && !strings.Contains(view.text, "</b>\n<i>") {
+			t.Errorf("%s has no one-line hint under its title: %q", name, view.text)
+		}
+		if !strings.Contains(view.text, "<blockquote>") {
+			t.Errorf("%s says its substance outside a quote: %q", name, view.text)
+		}
+		// A string the catalogue is missing renders as its own key.
+		if strings.Contains(view.text, "[") && strings.Contains(view.text, "]") {
+			t.Errorf("%s carries an unrendered key: %q", name, view.text)
+		}
 	}
 }
 
@@ -46,6 +75,7 @@ func TestAboutCardCarriesTheRunningBuild(t *testing.T) {
 	// cannot claim a build that is not running.
 	for _, want := range []string{
 		"<b>makeitMD</b> · <i>v9.9.9</i>",
+		i18n.T("en", "about.tagline"),
 		"Rendering · Telegram Bot API " + tg.BotAPI,
 		`Source · <a href="https://github.com/FreshLabDev/makeitMD">FreshLabDev/makeitMD</a> · Apache-2.0`,
 		`Admin · <a href="https://t.me/amtiyo">@amtiyo</a>`,
@@ -55,7 +85,7 @@ func TestAboutCardCarriesTheRunningBuild(t *testing.T) {
 		}
 	}
 	buttons := flatten(client.edits[0].markup)
-	if len(buttons) != 1 || buttons[0].Text != "Back" {
+	if len(buttons) != 1 || buttons[0].Text != i18n.T("en", "btn.back") {
 		t.Fatalf("about offers Back and nothing else: %+v", buttons)
 	}
 	// The repository is a link in the text; a button for it would be a second
@@ -74,7 +104,7 @@ func TestBackAndStaleDataReturnToTheRootPanel(t *testing.T) {
 		}
 	}
 	for index, edit := range client.edits {
-		if edit.text != startText || len(flatten(edit.markup)) != 2 {
+		if edit.text != rootScreen("en").text || len(flatten(edit.markup)) != 2 {
 			t.Fatalf("edit %d is not the root panel: %+v", index, edit)
 		}
 	}
@@ -100,6 +130,17 @@ func TestCommandsAreRegisteredPerScope(t *testing.T) {
 	if len(private) != 1 || private[0].Command != "start" || private[0].Description != "Open the makeitMD panel" {
 		t.Fatalf("private=%+v", private)
 	}
+	// Telegram serves the list matching the client's language, so every
+	// language the panel can speak has a menu of its own. Without them the menu
+	// would still be English in front of a translated panel.
+	for _, code := range i18n.Codes() {
+		if _, ok := client.scopes["all_private_chats:"+code]; !ok {
+			t.Fatalf("no private menu published for %s", code)
+		}
+		if _, ok := client.scopes["all_group_chats:"+code]; !ok {
+			t.Fatalf("no group menu published for %s", code)
+		}
+	}
 	group := client.scopes["all_group_chats"]
 	if len(group) != 1 || !group[0].IsEphemeral {
 		t.Fatalf("group /start must answer ephemerally: %+v", group)
@@ -123,6 +164,13 @@ func TestGroupStartRedirectsEphemerally(t *testing.T) {
 	buttons := flatten(client.ephemeral[0].markup)
 	if len(buttons) != 1 || buttons[0].URL != "https://t.me/makeitMD_bot" || buttons[0].Style != tg.StylePrimary {
 		t.Fatalf("the deep link is the one action of that screen: %+v", buttons)
+	}
+	// The redirect is an answer to a command, not a panel somebody navigates,
+	// and Close is a group-only idea this bot has no use for either way.
+	for _, button := range buttons {
+		if button.CallbackData != "" || button.Style == tg.StyleDanger {
+			t.Fatalf("the group redirect grew panel furniture: %+v", button)
+		}
 	}
 	// A group /start is not a conversion and not somebody to remember.
 	if store.touched != 0 || store.created != 0 {
@@ -162,7 +210,7 @@ func TestAboutStatesTheVersionAndNoCommit(t *testing.T) {
 	if got := buildLabel(build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}); got != "v1.2.3" {
 		t.Fatalf("label=%q", got)
 	}
-	text := aboutScreen(build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}).text
+	text := aboutScreen("en", build.Info{Version: "v1.2.3", Commit: "0123456789abcdef"}).text
 	if strings.Contains(text, "0123456") {
 		t.Fatalf("about card still carries the commit: %q", text)
 	}

@@ -1,0 +1,59 @@
+{
+ "about.admin": {
+  "en": "Admin"
+ },
+ "about.rendering": {
+  "en": "Rendering"
+ },
+ "about.source": {
+  "en": "Source"
+ },
+ "about.tagline": {
+  "en": "Send Markdown. Get native Telegram rich text."
+ },
+ "btn.about": {
+  "en": "About"
+ },
+ "btn.back": {
+  "en": "Back"
+ },
+ "btn.how": {
+  "en": "How it works"
+ },
+ "btn.open": {
+  "en": "Open {bot}"
+ },
+ "cmd.start": {
+  "en": "Open the {bot} panel"
+ },
+ "cmd.start_group": {
+  "en": "Open {bot} privately"
+ },
+ "home.body": {
+  "en": "Send me Markdown. I’ll render it."
+ },
+ "home.group": {
+  "en": "{bot} renders Markdown in a direct message. Open it there and paste your source."
+ },
+ "home.hint": {
+  "en": "Markdown to native Telegram formatting"
+ },
+ "how.body": {
+  "en": "Headings, nested styles, lists, task lists, tables, quotes, code blocks, details, links and formulas."
+ },
+ "how.engine": {
+  "en": "{bot} parses nothing itself — your source goes to Telegram and Telegram renders it."
+ },
+ "how.hint": {
+  "en": "Paste Markdown here and Telegram renders it"
+ },
+ "how.split": {
+  "en": "A paste your client splits into several messages is stitched back together first."
+ },
+ "how.title": {
+  "en": "How it works"
+ },
+ "msg.render_failed": {
+  "en": "I couldn’t render that Markdown. Check the syntax and try again."
+ }
+}
