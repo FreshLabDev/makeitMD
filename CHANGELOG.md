@@ -23,8 +23,12 @@ Use this section for changes that are merged but not released yet.
   nothing to configure. The greeting itself is unchanged.
 - **Commands are published per scope instead of globally.** The private list
   is `/start — Open the makeitMD panel`; the group list is one `/start`
-  registered as ephemeral, so a person who types it in a group gets a private
-  link back to the direct chat and the group sees nothing at all; the default
+  registered as ephemeral, so a person on a Bot API 10.3 client who types it in
+  a group gets a private link back to the direct chat and the group sees nothing
+  at all. An older client cannot send an ephemeral command, so the bot has no
+  message it is entitled to answer privately and stays silent rather than
+  replying in front of everyone -- which reads as a dead bot, and will be the
+  common case until clients catch up. The default
   scope, where the old global `Start the bot` entry lived, is cleared. Nothing
   is offered in a chat where it would do nothing.
 - One versioning and release document for the whole family. `docs/versioning.md`
