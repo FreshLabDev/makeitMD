@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
 )
 
@@ -21,7 +22,7 @@ func (f fakeStore) HealthStatus(context.Context) (db.HealthStatus, error) {
 }
 
 func TestHealthy(t *testing.T) {
-	handler := New(fakeStore{}, time.Now, time.Now(), Build{Version: "test"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := New(fakeStore{}, time.Now, time.Now(), build.Info{Version: "test"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if recorder.Code != http.StatusOK {
@@ -30,7 +31,7 @@ func TestHealthy(t *testing.T) {
 }
 
 func TestUnhealthyDatabase(t *testing.T) {
-	handler := New(fakeStore{err: errors.New("down")}, time.Now, time.Now(), Build{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	handler := New(fakeStore{err: errors.New("down")}, time.Now, time.Now(), build.Info{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/healthz", nil))
 	if recorder.Code != http.StatusServiceUnavailable {

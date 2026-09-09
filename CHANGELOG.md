@@ -15,6 +15,18 @@ Use this section for changes that are merged but not released yet.
 
 ### Changed
 
+- **`/start` now opens a panel instead of answering with one sentence.** Two
+  tabs and no more: *How it works*, and an *About* card carrying the version and
+  commit the running process reports on `/healthz`, the rendering it uses, the
+  repository, the licence and the admin. `Back` is the only navigation, every
+  tab edits the same message rather than posting another one, and there is still
+  nothing to configure. The greeting itself is unchanged.
+- **Commands are published per scope instead of globally.** The private list
+  is `/start — Open the makeitMD panel`; the group list is one `/start`
+  registered as ephemeral, so a person who types it in a group gets a private
+  link back to the direct chat and the group sees nothing at all; the default
+  scope, where the old global `Start the bot` entry lived, is cleared. Nothing
+  is offered in a chat where it would do nothing.
 - One versioning and release document for the whole family. `docs/versioning.md`
   and `docs/releases.md` are now byte-identical across every Asterfield
   repository apart from two clearly marked sections: this repository's own
@@ -28,9 +40,6 @@ Use this section for changes that are merged but not released yet.
   refuses a tag that is not on the branch its channel is published from.
   Earlier pre-releases were tagged on `main` under the previous rule; they are
   left as they are.
-
-### Changed
-
 - `github.com/FreshLabDev/tg` moves to `v0.0.1-alpha.7`. It carries one fix:
   a preflight probe is marked as a probe, so the `404 method not found` it
   expects stops being counted and logged as a transport failure. All four bots
@@ -38,6 +47,9 @@ Use this section for changes that are merged but not released yet.
 
 ### Added
 
+- `internal/build` holds the version, commit and build date the linker stamped
+  in. `/healthz` and the About card read the same value, so the panel cannot
+  report a build that is not the one answering.
 - `deploy/ws04/compose.yaml`, the production stack, pulling the image the
   release workflow publishes to GHCR. The stack on the host built its own image
   from a working copy, so what served users was not the artifact CI had tested,

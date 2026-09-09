@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/FreshLabDev/makeitMD/internal/bot"
+	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/config"
 	"github.com/FreshLabDev/makeitMD/internal/db"
 	"github.com/FreshLabDev/makeitMD/internal/health"
@@ -53,8 +54,9 @@ func run() error {
 		}
 	}
 	client := tg.New(cfg.TelegramBotToken,
-		// Only messages: makeitMD has no buttons and no group presence.
-		tg.WithAllowedUpdates("message"),
+		// Messages carry the pastes; callback queries carry the /start panel.
+		// Nothing else is asked for: makeitMD has no group presence to track.
+		tg.WithAllowedUpdates("message", "callback_query"),
 		tg.WithLogger(log),
 	)
 	// Rendering Markdown is the whole bot, and it needs sendRichMessage. A Bot
@@ -66,10 +68,11 @@ func run() error {
 	}
 	log.Info("telegram ready", "username", me.Username, "bot_api", tg.BotAPI)
 
-	service := bot.New(client, data, log)
+	info := build.Info{Version: version, Commit: commit, Date: date}
+	service := bot.New(client, data, log, info, me.Username)
 	startedAt := time.Now()
 	mux := http.NewServeMux()
-	mux.Handle("GET /healthz", health.New(data, service.LastPoll, startedAt, health.Build{Version: version, Commit: commit, Date: date}, log))
+	mux.Handle("GET /healthz", health.New(data, service.LastPoll, startedAt, info, log))
 	mux.Handle("GET /metrics", metrics.Handler())
 	server := &http.Server{
 		Addr: cfg.HTTPAddr, Handler: mux,

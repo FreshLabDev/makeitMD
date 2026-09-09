@@ -30,7 +30,7 @@ chat and receive Telegram's native rendering immediately.
 |:--|:--|
 | Exact input | Passes the submitted string unchanged as `rich_message.markdown` |
 | Native rendering | Uses Telegram `sendRichMessage`, not a custom parser |
-| Minimal interaction | English only, `/start` only, no buttons or settings |
+| Minimal interaction | English only, `/start` only, one panel of two tabs, no settings |
 | Private operations | Statistics and source audit stay operator-only |
 | Direct integration | Calls the Bot API over HTTP without a Telegram library |
 
@@ -69,6 +69,16 @@ exists.
 The greeting is intentionally short:
 
 > Send me Markdown. I’ll render it.
+
+`/start` also opens the panel, which is two tabs and nothing else: **How it
+works**, and **About** — the running version and commit, the rendering the bot
+uses, the repository, the licence and the admin. `Back` returns to the greeting,
+and every tab edits the same message rather than adding another one. There is
+nothing to configure, so there is no settings screen.
+
+Everything else the bot says is a rendered message. In a group makeitMD renders
+nothing: `/start` there is registered as an ephemeral command, so the answer —
+a link back to the private chat — is visible only to the person who sent it.
 
 Rich Markdown supports headings, nested styles, lists, task lists, tables,
 quotes, code blocks, details, links, formulas, and other structured content.

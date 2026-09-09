@@ -5,11 +5,35 @@ Keep makeitMD minimal, private by default, and production-minded.
 ## Product Boundaries
 
 - English only.
-- `/start` is the only command.
-- No buttons, menus, settings, AI, or custom Markdown parser.
-- Accept text only in private chats. Pass plain source unchanged; when a Telegram
+- `/start` is the only command. It is published per scope, never globally: the
+  private list is the panel, the group list is one ephemeral redirect, and the
+  default scope is cleared.
+- `/start` opens one panel, two tabs wide and one screen deep: **How it works**
+  and **About**, each returning with `Back`. This is where the boundary moved --
+  it used to be "no buttons at all". A command that answers with a sentence and
+  no way forward reads as an unfinished bot, and the family's About card is how
+  anybody finds the running version, the source and the admin. What did not
+  move: there are still no settings, no state a button can change, and no third
+  tab. Adding one needs a reason as good as this one.
+- No `Close` button in a private chat -- the conversation is the panel, so there
+  is nothing covering anything. No emoji on button labels: in this family an
+  emoji marks state, it is not an icon.
+- Style the one button that matters on a screen (`tg.StylePrimary`) and nothing
+  else; `tg.StyleDanger` stays unused because makeitMD destroys nothing.
+- The About card takes its version and commit from the same `build.Info`
+  `/healthz` reports. Never introduce a second source for either.
+- No AI, and no custom Markdown parser.
+- Render text only in private chats. Pass plain source unchanged; when a Telegram
   client has consumed formatting into `Message.entities`, deterministically
   restore only those entity ranges before calling Bot API 10.1 `sendRichMessage`.
+- In a group the bot renders nothing. `/start` is registered there with
+  `is_ephemeral`, so the command and its answer are visible only to the person
+  who typed it; without an ephemeral id to answer, stay silent rather than post
+  a redirect the whole group has to read. Group traffic reaches no database
+  write at all.
+- Panel text is HTML through `SendMessage`/`EditMessageText`; it is fixed,
+  reviewed and carries no user input. User-facing failure strings stay plain
+  text, and user Markdown stays `sendRichMessage`.
 - Never add user-facing statistics unless explicitly requested.
 
 ## Data And Security
@@ -83,7 +107,11 @@ validation, and `govulncheck`.
 ## Release Checklist
 
 - `core/migrations/003_makeitmd.sql` is applied and `makeitmd_core` can connect.
-- `/start` replies in English without buttons.
+- `/start` opens the two-tab panel in English; How it works, About and `Back`
+  all edit the same message instead of stacking new ones.
+- The About card shows the version and commit `/healthz` reports for the same
+  process.
+- `/start` in a group answers only the sender, and posts nothing publicly.
 - Valid Rich Markdown is preserved byte-for-byte in the API request and renders successfully.
 - Invalid Rich Markdown is stored as failed and receives the short error response.
 - Telegram 429 honors `retry_after`; transport errors never reveal the bot token.
