@@ -46,7 +46,7 @@ chat and receive Telegram's native rendering immediately.
 ## Quick Start
 
 You need Go 1.26.5+, Docker, a Telegram token from
-[BotFather](https://t.me/BotFather), and access to the FreshLab shared
+[BotFather](https://t.me/BotFather), and access to the Asterfield shared
 `core-postgres` database.
 
 ```sh

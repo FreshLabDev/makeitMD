@@ -79,7 +79,7 @@ and live verification on WS04.
 - Renders the user's exact source text through Telegram Bot API 10.1 Rich
   Markdown without a custom parser, AI, buttons, or settings.
 - Keeps `/start` as the only command and serves private chats in English.
-- Uses the shared FreshLab `core-postgres` identity hub with an isolated
+- Uses the shared Asterfield `core-postgres` identity hub with an isolated
   `makeitmd` schema for conversion audit, lifetime statistics, and polling
   state.
 - Includes bounded retries, token-safe errors, durable offsets, replay
