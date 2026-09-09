@@ -60,6 +60,9 @@ Keep makeitMD minimal, private by default, and production-minded.
 
 ## Releases
 
+- Work on `dev`. Pre-releases (`-alpha.N`, `-beta.N`, `-rc.N`) are tagged on
+  `dev`; stable versions are tagged on `main`, on the merge commit from `dev`.
+  The test bot runs `dev`, the production bot runs `main`.
 - Follow `docs/versioning.md` and `docs/releases.md`.
 - Keep notable changes under `## Unreleased` in `CHANGELOG.md` until release preparation.
 - Every production deployment must publish its matching alpha/beta/RC
