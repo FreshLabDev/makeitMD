@@ -45,12 +45,53 @@ func Connect(ctx context.Context, databaseURL string) (*Store, error) {
 
 func (s *Store) Close() { s.pool.Close() }
 
+// botName is how makeitMD identifies itself to the shared core hub. Every
+// statement that writes a claim on behalf of this bot -- presence and the
+// language preference alike -- passes the same string, because core keys the
+// claim by it and two spellings would be two bots.
+const botName = "makeitmd"
+
 func (s *Store) Touch(ctx context.Context, user tg.User) error {
 	_, err := s.pool.Exec(ctx,
 		`SELECT core.touch($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		"makeitmd", user.ID, nullString(user.Username), nullString(user.FirstName),
+		botName, user.ID, nullString(user.Username), nullString(user.FirstName),
 		nullString(user.LastName), nullString(user.LanguageCode), nil, nil, nil, nil, user.IsBot)
 	return err
+}
+
+// SetLanguage records a manual language choice in the shared core hub, so the
+// person who picked a language here is understood by the sibling bots too.
+// The 'user'/'manual' literals stay inline on purpose: core takes
+// core.pref_scope/core.lang_source enums in those positions, and pgx would
+// send bound $n parameters as text, which PostgreSQL cannot match to the enum
+// overloads.
+func (s *Store) SetLanguage(ctx context.Context, userID int64, lang string) error {
+	_, err := s.pool.Exec(ctx, `SELECT core.set_language($1,'user',$2,$3,'manual')`, botName, userID, lang)
+	return err
+}
+
+// ClearLanguage deletes this bot's manual claim and lets the preference
+// re-resolve, which in practice hands the decision back to the Telegram
+// client's own language. It is what the "Follow Telegram" button does, and it
+// clears only makeitMD's claim: a choice somebody made in a sibling bot is
+// theirs to withdraw there.
+func (s *Store) ClearLanguage(ctx context.Context, userID int64) error {
+	_, err := s.pool.Exec(ctx, `SELECT core.clear_language($1,'user',$2)`, botName, userID)
+	return err
+}
+
+// EffectiveLanguage reads the resolved language from the core hub. A missing
+// preference is not an error: ok=false means "nobody has chosen, use the
+// Telegram hint".
+func (s *Store) EffectiveLanguage(ctx context.Context, userID int64) (string, bool, error) {
+	var lang *string
+	if err := s.pool.QueryRow(ctx, `SELECT core.effective_language($1,NULL,'user')`, userID).Scan(&lang); err != nil {
+		return "", false, err
+	}
+	if lang == nil || *lang == "" {
+		return "", false, nil
+	}
+	return *lang, true, nil
 }
 
 func (s *Store) CreateConversion(ctx context.Context, updateID int64, message tg.Message, raws []json.RawMessage, renderedMarkdown string) (int64, ConversionStatus, error) {
