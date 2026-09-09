@@ -2,9 +2,79 @@
 
 All notable makeitMD changes are documented here.
 
+The `## <tag>` section of this file *is* the GitHub Release body: the release
+workflow copies it verbatim and refuses a tag that has no section. Write it
+for whoever has to decide whether to upgrade.
+
+See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
+[`docs/releases.md`](docs/releases.md) for how a release is published.
+
 ## Unreleased
 
 Use this section for changes that are merged but not released yet.
+
+## v0.1.1 - 2026-09-09
+
+makeitMD gets a panel. The product boundary moved deliberately: /start now opens
+two tabs instead of answering with a sentence and no way forward. Still no
+settings.
+
+
+### Changed
+
+- **`/start` now opens a panel instead of answering with one sentence.** Two
+  tabs and no more: *How it works*, and an *About* card carrying the version and
+  commit the running process reports on `/healthz`, the rendering it uses, the
+  repository, the licence and the admin. `Back` is the only navigation, every
+  tab edits the same message rather than posting another one, and there is still
+  nothing to configure. The greeting itself is unchanged.
+- **Commands are published per scope instead of globally.** The private list
+  is `/start — Open the makeitMD panel`; the group list is one `/start`
+  registered as ephemeral, so a person on a Bot API 10.3 client who types it in
+  a group gets a private link back to the direct chat and the group sees nothing
+  at all. An older client cannot send an ephemeral command, so the bot has no
+  message it is entitled to answer privately and stays silent rather than
+  replying in front of everyone -- which reads as a dead bot, and will be the
+  common case until clients catch up. The default
+  scope, where the old global `Start the bot` entry lived, is cleared. Nothing
+  is offered in a chat where it would do nothing.
+- One versioning and release document for the whole family. `docs/versioning.md`
+  and `docs/releases.md` are now byte-identical across every Asterfield
+  repository apart from two clearly marked sections: this repository's own
+  version line, and the surface where a change here breaks something. They spell
+  out what each of the three numbers means, what the `-alpha.N` suffix counts,
+  when alpha becomes beta and when it is legitimate to skip to rc or run a
+  pre-release in production.
+- **Pre-releases are now tagged on `dev`, not `main`.** Only stable versions are
+  tagged on `main`, on the merge commit from `dev`. `release.yml` had no branch
+  check at all before, so a tag pushed from any branch would publish; it now
+  refuses a tag that is not on the branch its channel is published from.
+  Earlier pre-releases were tagged on `main` under the previous rule; they are
+  left as they are.
+- `github.com/FreshLabDev/tg` moves to `v0.0.1-alpha.7`. It carries one fix:
+  a preflight probe is marked as a probe, so the `404 method not found` it
+  expects stops being counted and logged as a transport failure. All four bots
+  on the shared client now run the same version.
+
+### Added
+
+- `docs/releases.md` gained a **Deploying** section, and `AGENTS.md` points at it.
+  Releasing was documented; deploying was not, in any repository in the family —
+  the process stopped at "deploy it" and never said how. That gap mattered more
+  after the stacks moved from building on the host to pulling a published image,
+  because the procedure changed on the same day. The section names this stack's
+  host directory, its env file, the variable that selects the image, the networks
+  it needs, and what a rollback actually is.
+
+- `internal/build` holds the version, commit and build date the linker stamped
+  in. `/healthz` and the About card read the same value, so the panel cannot
+  report a build that is not the one answering.
+- `deploy/ws04/compose.yaml`, the production stack, pulling the image the
+  release workflow publishes to GHCR. The stack on the host built its own image
+  from a working copy, so what served users was not the artifact CI had tested,
+  scanned and published, and nothing on the host could say which commit it came
+  from. `MAKEITMD_IMAGE` has no default: an unset one stops the stack instead of
+  quietly starting something else.
 
 ## v0.1.1-alpha.3 - 2026-09-08
 
@@ -79,7 +149,7 @@ and live verification on WS04.
 - Renders the user's exact source text through Telegram Bot API 10.1 Rich
   Markdown without a custom parser, AI, buttons, or settings.
 - Keeps `/start` as the only command and serves private chats in English.
-- Uses the shared FreshLab `core-postgres` identity hub with an isolated
+- Uses the shared Asterfield `core-postgres` identity hub with an isolated
   `makeitmd` schema for conversion audit, lifetime statistics, and polling
   state.
 - Includes bounded retries, token-safe errors, durable offsets, replay

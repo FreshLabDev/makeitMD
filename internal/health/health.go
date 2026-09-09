@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
 )
 
@@ -15,22 +16,16 @@ type Store interface {
 	HealthStatus(context.Context) (db.HealthStatus, error)
 }
 
-type Build struct {
-	Version string
-	Commit  string
-	Date    string
-}
-
 type Handler struct {
 	store     Store
 	lastPoll  func() time.Time
 	startedAt time.Time
-	build     Build
+	build     build.Info
 	log       *slog.Logger
 }
 
-func New(store Store, lastPoll func() time.Time, startedAt time.Time, build Build, log *slog.Logger) *Handler {
-	return &Handler{store: store, lastPoll: lastPoll, startedAt: startedAt, build: build, log: log}
+func New(store Store, lastPoll func() time.Time, startedAt time.Time, info build.Info, log *slog.Logger) *Handler {
+	return &Handler{store: store, lastPoll: lastPoll, startedAt: startedAt, build: info, log: log}
 }
 
 type response struct {

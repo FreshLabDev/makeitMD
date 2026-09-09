@@ -14,13 +14,13 @@ import (
 
 	"github.com/FreshLabDev/tg"
 
+	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
 	"github.com/FreshLabDev/makeitMD/internal/metrics"
 	"github.com/FreshLabDev/makeitMD/internal/richmarkdown"
 )
 
 const (
-	startText     = "Send me Markdown. I’ll render it."
 	errorText     = "I couldn’t render that Markdown. Check the syntax and try again."
 	chunkDebounce = 700 * time.Millisecond
 	chunkMaxGap   = 2 * time.Second
@@ -38,18 +38,36 @@ type Store interface {
 // Telegram is the part of the shared client makeitMD uses. It is satisfied by
 // *tg.Client as it stands.
 type Telegram interface {
-	SetMyCommands(context.Context, []tg.BotCommand) error
+	SetMyCommandsForScope(context.Context, []tg.BotCommand, *tg.BotCommandScope) error
 	GetUpdates(context.Context, int64, int) ([]tg.Update, error)
+	SendMessage(context.Context, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
 	SendPlainText(context.Context, int64, string) (tg.Message, error)
+	SendEphemeralMessage(context.Context, int64, int64, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
 	SendRichMarkdown(context.Context, int64, string, *tg.InlineKeyboardMarkup, ...tg.RichOption) (tg.Message, error)
+	EditMessageText(context.Context, int64, int64, string, *tg.InlineKeyboardMarkup) error
+	AnswerCallbackQuery(context.Context, string, string) error
 }
 
 // pollTimeout is the long-poll duration in seconds. The client derives its own
 // HTTP deadline from it.
 const pollTimeout = 50
 
-// startCommand is published once at startup.
-var startCommand = []tg.BotCommand{{Command: "start", Description: "Start the bot"}}
+// privateCommands is the menu in a direct message, which is where the whole bot
+// lives.
+var privateCommands = []tg.BotCommand{{Command: "start", Description: "Open the makeitMD panel"}}
+
+// groupCommands keep one command in groups rather than none. An empty list
+// would be tidier on paper, but somebody who adds makeitMD to a group would
+// then find no menu, no reply and nothing saying why. `IsEphemeral` is what
+// makes a Bot API 10.3 client send the command itself as an ephemeral message,
+// which is both what authorizes the reply and what keeps the whole exchange
+// invisible to everyone except the person who typed it -- so the redirect costs
+// the group no message at all.
+var groupCommands = []tg.BotCommand{{Command: "start", Description: "Open makeitMD privately", IsEphemeral: true}}
+
+// noCommands clears the scope it is published to. It must not be nil: the API
+// takes an empty JSON array, and a nil slice marshals to null.
+var noCommands = []tg.BotCommand{}
 
 // paste is what a person actually sent. Telegram splits a long paste into
 // several messages, so one conversion can span more than one of them, and raws
@@ -64,17 +82,45 @@ type Bot struct {
 	telegram     Telegram
 	store        Store
 	log          *slog.Logger
+	build        build.Info
+	username     string
 	lastPollUnix atomic.Int64
 }
 
-func New(client Telegram, data Store, log *slog.Logger) *Bot {
-	return &Bot{telegram: client, store: data, log: log}
+// New takes the build the binary was stamped with, so the About screen reports
+// the same version `/healthz` does, and the bot's own username, which is the
+// deep link a group /start hands back.
+func New(client Telegram, data Store, log *slog.Logger, info build.Info, username string) *Bot {
+	return &Bot{telegram: client, store: data, log: log, build: info, username: username}
+}
+
+// registerCommands publishes one list per scope instead of a single global one.
+// The bot renders Markdown in private chats only, and a global list offers the
+// command everywhere -- including chat types where tapping it does nothing.
+// The default scope is cleared rather than left alone: makeitMD used to publish
+// there, and the two explicit scopes below already cover every chat a bot can
+// be in, so anything still registered on the default is a description nothing
+// reaches. A failure here is logged and not fatal: a bot that renders Markdown
+// without a menu still works.
+func (b *Bot) registerCommands(ctx context.Context) {
+	scopes := []struct {
+		scope    string
+		commands []tg.BotCommand
+	}{
+		{"all_private_chats", privateCommands},
+		{"all_group_chats", groupCommands},
+		{"default", noCommands},
+	}
+	for _, published := range scopes {
+		if err := b.telegram.SetMyCommandsForScope(ctx, published.commands,
+			&tg.BotCommandScope{Type: published.scope}); err != nil {
+			b.log.Warn("set telegram commands failed", "scope", published.scope, "error", err)
+		}
+	}
 }
 
 func (b *Bot) Run(ctx context.Context) error {
-	if err := b.telegram.SetMyCommands(ctx, startCommand); err != nil {
-		b.log.Warn("set telegram commands failed", "error", err)
-	}
+	b.registerCommands(ctx)
 	offset, err := b.store.Offset(ctx)
 	if err != nil {
 		return err
@@ -111,29 +157,39 @@ func (b *Bot) Run(ctx context.Context) error {
 		}
 		b.lastPollUnix.Store(time.Now().Unix())
 		for index := 0; index < len(updates); {
-			grouped, lastIndex := groupTextUpdates(updates, index)
-			handleErr := b.handle(ctx, grouped)
+			// A callback query carries no message of its own to group with the
+			// next update, so panel taps are routed on their own.
+			updateID := updates[index].UpdateID
+			lastIndex := index
+			var handleErr error
+			if callback := updates[index].Callback; callback != nil {
+				handleErr = b.handleCallback(ctx, callback)
+			} else {
+				var grouped paste
+				grouped, lastIndex = groupTextUpdates(updates, index)
+				handleErr = b.handle(ctx, grouped)
+			}
 			if handleErr != nil {
 				if ctx.Err() != nil {
 					return nil
 				}
-				if grouped.updateID == lastFailedUpdate {
+				if updateID == lastFailedUpdate {
 					failedRetries++
 				} else {
-					lastFailedUpdate = grouped.updateID
+					lastFailedUpdate = updateID
 					failedRetries = 1
 				}
 				if failedRetries <= maxUpdateRetries {
-					b.log.Error("telegram update failed; will retry", "update_id", grouped.updateID, "attempt", failedRetries, "error", handleErr)
+					b.log.Error("telegram update failed; will retry", "update_id", updateID, "attempt", failedRetries, "error", handleErr)
 					if !wait(ctx, jitterDuration(250*time.Millisecond)) {
 						return nil
 					}
 					break
 				}
-				b.log.Error("telegram update permanently failed; dropping", "update_id", grouped.updateID, "attempts", failedRetries, "error", handleErr)
+				b.log.Error("telegram update permanently failed; dropping", "update_id", updateID, "attempts", failedRetries, "error", handleErr)
 				lastFailedUpdate = 0
 				failedRetries = 0
-			} else if grouped.updateID == lastFailedUpdate {
+			} else if updateID == lastFailedUpdate {
 				lastFailedUpdate = 0
 				failedRetries = 0
 			}
@@ -158,15 +214,17 @@ func (b *Bot) LastPoll() time.Time {
 
 func (b *Bot) handle(ctx context.Context, p paste) error {
 	message := p.message
-	if message == nil || message.From == nil || message.From.IsBot || message.Chat.Type != "private" || message.Text == "" {
+	if message == nil || message.From == nil || message.From.IsBot || message.Text == "" {
 		return nil
+	}
+	if message.Chat.Type != "private" {
+		return b.handleGroupStart(ctx, message)
 	}
 	if err := b.store.Touch(ctx, *message.From); err != nil {
 		return err
 	}
-	command := strings.Fields(message.Text)
-	if len(command) > 0 && command[0] == "/start" {
-		return b.sendText(ctx, message.Chat.ID, startText)
+	if isStartCommand(message.Text) {
+		return b.sendScreen(ctx, message.Chat.ID, rootScreen())
 	}
 	if strings.HasPrefix(message.Text, "/") {
 		return nil
@@ -223,6 +281,60 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	}
 	metrics.ConversionsSent.Inc()
 	return nil
+}
+
+// handleGroupStart answers /start where makeitMD cannot work. The reply is
+// ephemeral, so the group sees nothing; without an ephemeral id there is
+// nothing to reply to -- an older client sent the command as an ordinary
+// public message -- and staying silent beats posting a redirect everybody in
+// the group has to read. Nothing is written to the database on this path: no
+// conversion happened, and a person who never opened a private chat is not
+// somebody this bot has anything to remember about.
+func (b *Bot) handleGroupStart(ctx context.Context, message *tg.Message) error {
+	if message.EphemeralMessageID == 0 || !isStartCommand(message.Text) {
+		return nil
+	}
+	view := groupScreen(b.username)
+	_, err := b.telegram.SendEphemeralMessage(ctx, message.Chat.ID, message.From.ID,
+		message.EphemeralMessageID, view.text, view.markup)
+	return err
+}
+
+// handleCallback moves the panel between its screens by editing the message the
+// button is attached to, so the chat keeps one panel instead of a stack of them.
+func (b *Bot) handleCallback(ctx context.Context, query *tg.CallbackQuery) error {
+	// The spinner on a tapped button turns until the query is answered, so it
+	// is answered before the edit rather than after it. A failure there is not
+	// worth abandoning the navigation the person asked for.
+	if err := b.telegram.AnswerCallbackQuery(ctx, query.ID, ""); err != nil {
+		b.log.Warn("answer callback query failed", "error", err)
+	}
+	// The client models an absent callback message as a zero value rather than
+	// nil, which would address chat 0. makeitMD only ever attaches buttons to a
+	// private-chat message of its own, so anything else is not this panel.
+	if query.Message.Chat.Type != "private" || query.Message.MessageID == 0 {
+		return nil
+	}
+	view := b.screenFor(query.Data)
+	return b.telegram.EditMessageText(ctx, query.Message.Chat.ID, query.Message.MessageID, view.text, view.markup)
+}
+
+// sendScreen posts a panel screen. Unlike the strings below it, panel text is
+// HTML: the About card is a fixed, reviewed string that has to render a quote
+// and a link, and it carries no user input that could break its own markup.
+func (b *Bot) sendScreen(ctx context.Context, chatID int64, view screen) error {
+	_, err := b.telegram.SendMessage(ctx, chatID, view.text, view.markup)
+	return err
+}
+
+// isStartCommand accepts the bare command and the /start@bot form a group
+// client sends.
+func isStartCommand(text string) bool {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return false
+	}
+	return fields[0] == "/start" || strings.HasPrefix(fields[0], "/start@")
 }
 
 // sendText delivers one of this bot's own fixed strings with no parse mode.

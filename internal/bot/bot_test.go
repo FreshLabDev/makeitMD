@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/FreshLabDev/makeitMD/internal/build"
 	"github.com/FreshLabDev/makeitMD/internal/db"
 	"github.com/FreshLabDev/tg"
 )
@@ -38,21 +39,57 @@ func (s *fakeStore) MarkFailed(context.Context, int64, string, string, db.Result
 	return nil
 }
 
-type fakeTelegram struct {
-	textErr, richErr error
-	texts            []string
-	rich             []string
+type sentMessage struct {
+	text   string
+	markup *tg.InlineKeyboardMarkup
 }
 
-func (f *fakeTelegram) SetMyCommands(context.Context, []tg.BotCommand) error        { return nil }
+type fakeTelegram struct {
+	textErr, richErr, messageErr error
+	texts                        []string
+	rich                         []string
+	messages                     []sentMessage
+	ephemeral                    []sentMessage
+	edits                        []sentMessage
+	answered                     []string
+	scopes                       map[string][]tg.BotCommand
+}
+
+func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.BotCommand, scope *tg.BotCommandScope) error {
+	if f.scopes == nil {
+		f.scopes = map[string][]tg.BotCommand{}
+	}
+	name := "none"
+	if scope != nil {
+		name = scope.Type
+	}
+	f.scopes[name] = commands
+	return nil
+}
 func (f *fakeTelegram) GetUpdates(context.Context, int64, int) ([]tg.Update, error) { return nil, nil }
+func (f *fakeTelegram) SendMessage(_ context.Context, _ int64, text string, markup *tg.InlineKeyboardMarkup) (tg.Message, error) {
+	f.messages = append(f.messages, sentMessage{text: text, markup: markup})
+	return tg.Message{MessageID: 42}, f.messageErr
+}
 func (f *fakeTelegram) SendPlainText(_ context.Context, _ int64, text string) (tg.Message, error) {
 	f.texts = append(f.texts, text)
 	return tg.Message{}, f.textErr
 }
+func (f *fakeTelegram) SendEphemeralMessage(_ context.Context, _, _, _ int64, text string, markup *tg.InlineKeyboardMarkup) (tg.Message, error) {
+	f.ephemeral = append(f.ephemeral, sentMessage{text: text, markup: markup})
+	return tg.Message{EphemeralMessageID: 8}, nil
+}
 func (f *fakeTelegram) SendRichMarkdown(_ context.Context, _ int64, text string, _ *tg.InlineKeyboardMarkup, _ ...tg.RichOption) (tg.Message, error) {
 	f.rich = append(f.rich, text)
 	return tg.Message{MessageID: 99, Raw: json.RawMessage(`{"message_id":99}`)}, f.richErr
+}
+func (f *fakeTelegram) EditMessageText(_ context.Context, _, _ int64, text string, markup *tg.InlineKeyboardMarkup) error {
+	f.edits = append(f.edits, sentMessage{text: text, markup: markup})
+	return nil
+}
+func (f *fakeTelegram) AnswerCallbackQuery(_ context.Context, id, _ string) error {
+	f.answered = append(f.answered, id)
+	return nil
 }
 
 // testPaste turns one update into what the run loop hands to handle.
@@ -69,12 +106,13 @@ func testUpdate(text string) tg.Update {
 }
 
 func newTestBot(client *fakeTelegram, store *fakeStore) *Bot {
-	return New(client, store, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(client, store, slog.New(slog.NewTextHandler(io.Discard, nil)),
+		build.Info{Version: "v9.9.9", Commit: "abcdef1234"}, "makeitMD_bot")
 }
 
 func TestStartSendFailureIsReturned(t *testing.T) {
 	want := errors.New("temporary")
-	client := &fakeTelegram{textErr: want}
+	client := &fakeTelegram{messageErr: want}
 	store := &fakeStore{}
 	err := newTestBot(client, store).handle(context.Background(), testPaste(testUpdate("/start")))
 	if !errors.Is(err, want) {

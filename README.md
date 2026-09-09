@@ -30,7 +30,7 @@ chat and receive Telegram's native rendering immediately.
 |:--|:--|
 | Exact input | Passes the submitted string unchanged as `rich_message.markdown` |
 | Native rendering | Uses Telegram `sendRichMessage`, not a custom parser |
-| Minimal interaction | English only, `/start` only, no buttons or settings |
+| Minimal interaction | English only, `/start` only, one panel of two tabs, no settings |
 | Private operations | Statistics and source audit stay operator-only |
 | Direct integration | Calls the Bot API over HTTP without a Telegram library |
 
@@ -46,7 +46,7 @@ chat and receive Telegram's native rendering immediately.
 ## Quick Start
 
 You need Go 1.26.5+, Docker, a Telegram token from
-[BotFather](https://t.me/BotFather), and access to the FreshLab shared
+[BotFather](https://t.me/BotFather), and access to the Asterfield shared
 `core-postgres` database.
 
 ```sh
@@ -69,6 +69,16 @@ exists.
 The greeting is intentionally short:
 
 > Send me Markdown. I’ll render it.
+
+`/start` also opens the panel, which is two tabs and nothing else: **How it
+works**, and **About** — the running version and commit, the rendering the bot
+uses, the repository, the licence and the admin. `Back` returns to the greeting,
+and every tab edits the same message rather than adding another one. There is
+nothing to configure, so there is no settings screen.
+
+Everything else the bot says is a rendered message. In a group makeitMD renders
+nothing: `/start` there is registered as an ephemeral command, so the answer —
+a link back to the private chat — is visible only to the person who sent it.
 
 Rich Markdown supports headings, nested styles, lists, task lists, tables,
 quotes, code blocks, details, links, formulas, and other structured content.
@@ -137,6 +147,22 @@ Raw `sent` and `failed` conversions expire after 90 days by default. Unresolved
 | `BUILD_VERSION` | no | `dev` | Version stamped into health and logs |
 | `BUILD_COMMIT` | no | `none` | Source revision |
 | `BUILD_DATE` | no | `unknown` | UTC build timestamp |
+
+## Production
+
+`deploy/ws04/compose.yaml` is the production stack. It pulls the image the
+release workflow published to GHCR and never builds one:
+
+```sh
+# in the stack directory, alongside .env
+MAKEITMD_IMAGE=ghcr.io/freshlabdev/makeitmd@sha256:<digest> docker compose up -d
+```
+
+Pin `MAKEITMD_IMAGE` by digest rather than tag. A digest names one exact build,
+so a rollback is a one-line change with nothing to rebuild, and `docker inspect`
+on the running container answers which commit it came from. `BUILD_VERSION` /
+`BUILD_COMMIT` / `BUILD_DATE` are baked in by the release workflow; they only
+need setting for a local build.
 
 ## Development
 
