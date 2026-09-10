@@ -13,6 +13,47 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.2 - 2026-09-10
+
+makeitMD speaks sixteen languages.
+
+Every word it says moved out of the Go source into a translation catalogue, the
+language is read from the shared hub so a choice made in any sibling bot is
+honoured here, and there is a picker for changing it. Nobody has to do anything:
+a person whose Telegram is Russian gets Russian without touching a setting.
+
+### Changed
+
+- `docs/releases.md` names the real cause of the `403` a digest pull used to
+  answer: the account running the deploy could not read the private package,
+  not anything about the digest. Pulling the tag first was a workaround for
+  that, and is no longer required.
+
+## v0.1.2-alpha.1 - 2026-09-09
+
+### Added
+
+- **The panel speaks the languages the family shares, and lets you pick one.**
+  Every sentence makeitMD says now comes from one embedded catalogue instead of
+  a Go constant, the language is resolved per person from the shared hub with
+  the Telegram client's own language as the fallback, and a *Language* screen
+  offers the same sixteen options, in the same order, that the sibling bots
+  offer. The choice is stored once for the whole family, so making it here makes
+  it everywhere; *Follow Telegram* withdraws it and lets the client decide
+  again. Only English is written so far -- the other fifteen locales read in
+  English until they are translated, which is why they can arrive one at a time.
+  Telegram's command menu is published per language for the same reason: a
+  translated panel opened from an English menu speaks two languages at one
+  person.
+
+### Changed
+
+- **Every screen opens with a title.** The root screen used to start with bare
+  prose while every other panel in the family started with a bold title and a
+  one-line hint, which made makeitMD read as a different product from the bot
+  next to it. The greeting itself is unchanged, and the About card keeps the
+  shape it already had.
+
 ## v0.1.1 - 2026-09-09
 
 makeitMD gets a panel. The product boundary moved deliberately: /start now opens
