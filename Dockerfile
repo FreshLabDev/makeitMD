@@ -17,6 +17,12 @@ RUN apk add --no-cache ca-certificates && adduser -D -H -u 10001 makeitmd
 WORKDIR /app
 COPY --from=build /out/makeitmd /app/makeitmd
 COPY migrations /app/migrations
+# docker inspect answers which build is running without starting it.
+ARG VERSION=dev
+ARG COMMIT=none
+LABEL org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${COMMIT}" \
+      org.opencontainers.image.source="https://github.com/FreshLabDev/makeitMD"
 USER makeitmd
 EXPOSE 8080
 ENTRYPOINT ["/app/makeitmd"]
