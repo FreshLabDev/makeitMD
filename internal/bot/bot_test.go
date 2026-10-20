@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
@@ -23,9 +24,12 @@ type fakeStore struct {
 	langErr error
 	// set records the language written to the hub, cleared counts withdrawals,
 	// and writeErr is the hub refusing both.
-	set      string
-	cleared  int
-	writeErr error
+	set           string
+	cleared       int
+	writeErr      error
+	sourceMessage tg.Message
+	sourceRaws    []json.RawMessage
+	lookupErr     error
 }
 
 func (s *fakeStore) Offset(context.Context) (int64, error)      { return 0, nil }
@@ -52,8 +56,12 @@ func (s *fakeStore) ClearLanguage(context.Context, int64) error {
 	s.set, s.lang = "", ""
 	return nil
 }
-func (s *fakeStore) CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error) {
+func (s *fakeStore) ConversionStatus(context.Context, int64) (db.ConversionStatus, error) {
+	return s.status, s.lookupErr
+}
+func (s *fakeStore) CreateConversion(_ context.Context, _ int64, message tg.Message, raws []json.RawMessage, _ string) (int64, db.ConversionStatus, error) {
 	s.created++
+	s.sourceMessage, s.sourceRaws = message, raws
 	status := s.status
 	if status == "" {
 		status = db.ConversionReceived
@@ -83,6 +91,14 @@ type fakeTelegram struct {
 	edits                        []sentMessage
 	answered                     []string
 	scopes                       map[string][]tg.BotCommand
+	file                         tg.File
+	fileErr, downloadErr         error
+	downloadErrors               []error
+	fileContent                  []byte
+	files, downloads             int
+	downloadPath                 string
+	downloadLimit                int64
+	downloadContext              context.Context
 }
 
 func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.BotCommand, scope *tg.BotCommandScope) error {
@@ -100,6 +116,21 @@ func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.Bo
 	return nil
 }
 func (f *fakeTelegram) GetUpdates(context.Context, int64, int) ([]tg.Update, error) { return nil, nil }
+func (f *fakeTelegram) GetFile(_ context.Context, _ string) (tg.File, error) {
+	f.files++
+	return f.file, f.fileErr
+}
+func (f *fakeTelegram) DownloadToFile(ctx context.Context, _ string, dst string, maxBytes int64) error {
+	f.downloads++
+	f.downloadPath, f.downloadLimit, f.downloadContext = dst, maxBytes, ctx
+	if err := os.WriteFile(dst, f.fileContent, 0600); err != nil {
+		return err
+	}
+	if f.downloads <= len(f.downloadErrors) {
+		return f.downloadErrors[f.downloads-1]
+	}
+	return f.downloadErr
+}
 func (f *fakeTelegram) SendMessage(_ context.Context, _ int64, text string, markup *tg.InlineKeyboardMarkup) (tg.Message, error) {
 	f.messages = append(f.messages, sentMessage{text: text, markup: markup})
 	return tg.Message{MessageID: 42}, f.messageErr

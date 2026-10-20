@@ -13,8 +13,42 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+### Added
+
+- **Markdown can be sent as a file.** A UTF-8 text file of up to 128 KB gets
+  the same native rich reply as pasted Markdown, whatever its extension: `.md`,
+  `.txt`, `.tex` or none. Text is recognised by its contents, not by the name or
+  MIME type Telegram reports. Captions are ignored, and a file is never joined
+  to a neighbouring message. An empty, binary or non-UTF-8 file, a PDF and a
+  file over the limit each get a short explanation instead. The download has
+  15 seconds including `getFile`, retries a transient failure up to three
+  times within that budget, and goes to a private temporary directory that is
+  removed afterwards. Accepted files follow the existing conversion retention;
+  rejected ones are not stored. In groups a file is not downloaded at all.
+- How it works explains files, formulas (`$...$`, `$$...$$` and fenced
+  `math`) and Telegram's limits on a rich message. Formula source is passed to
+  Telegram unchanged; `\(...\)` and `\[...\]` are not rewritten.
+
+### Security
+
+- Go moves from 1.26.6 to 1.26.10 and `golang.org/x/text` from 0.39.0 to
+  0.41.0. On `v0.1.2` `govulncheck` finds ten advisories reachable from
+  makeitMD's code, nine in the standard library (among them GO-2026-6611,
+  -6612, -6613 and -6617 in `net/http` and HTTP/2) and GO-2026-6629 in
+  `x/text`; on this version it finds none.
+
+### Fixed
+
+- Inline code restored from a client's formatting kept its edge backticks and
+  surrounding spaces wrong: a span starting or ending with a backtick merged
+  with the delimiter, and a span with a space at both ends lost them. Both now
+  come back as the person typed them.
+
 ### Changed
 
+- Rendering errors now mention Telegram’s rich-message limits as well as
+  Markdown syntax. A byte download limit is not a rendered-character limit;
+  documents are never silently truncated or split.
 - **A release waits for CI.** `release.yml` runs `ci.yml` on the tagged commit
   and publishes nothing unless it passed. When CI cannot run, `release.yml` can
   be started by hand with the tag and a reason; that run skips CI and prints the
