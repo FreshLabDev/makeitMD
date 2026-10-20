@@ -13,6 +13,21 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4-alpha.4 - 2026-10-20
+
+Found by pasting a Claude answer copied in the iPhone app: the bot did not
+answer at all. Still on the production bot.
+
+### Fixed
+
+- **A message that arrives already formatted gets an answer.** Since Bot API
+  10.1 a Telegram client can send a paste as a rich message: blocks, with no
+  text field and no Markdown source. The bot ignored such messages without a
+  word. It now explains that it cannot read them and suggests a .md file or a
+  paste without formatting. Nothing is stored, and the log records only how
+  many blocks of each type arrived, to find out what clients send before
+  deciding whether to render them.
+
 ## v0.1.4-alpha.3 - 2026-10-20
 
 Found by pasting a ChatGPT answer into alpha.2 with ⌘⇧V. Still on the
