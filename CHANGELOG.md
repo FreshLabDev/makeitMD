@@ -13,57 +13,6 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
-## v0.1.3 - 2026-10-20
-
-No change to what the bot does. The image now names its version and commit in
-its labels, and a release cannot be published past a failing CI run.
-
-There was no pre-release: only the build and release machinery changed, and the
-image differs from `v0.1.2` by its labels. `govulncheck` finds nothing on Go
-1.26.10.
-
-### Added
-
-- UTF-8 text files, including `.md`, `.txt` and other extensions, now produce
-  the same native rich reply as pasted Markdown. Input is limited to 128 KiB,
-  downloads to 15 seconds, and temporary copies are removed after processing.
-  Captions are ignored; empty, binary and invalid UTF-8 files get a short
-  explanation. Accepted file source and document metadata follow the existing
-  conversion retention policy; rejected files are not stored as conversions.
-- Formula examples and file instructions in the existing How it works screen.
-  Native `$...$`, `$$...$$` and fenced `math` source stays unchanged; unsupported
-  delimiter aliases are not silently rewritten.
-
-### Security
-
-- Build with Go 1.26.10 and upgrade `golang.org/x/text` to v0.41.0. The audit
-  found reachable advisories in the previously pinned dependency and toolchain;
-  the Docker build and Go module now share the patched Go floor.
-
-### Fixed
-
-- Restoring Telegram inline-code entities no longer merges edge backticks with
-  the delimiter or strips meaningful surrounding spaces.
-- Transient document-download failures retry up to three times within the
-  overall 15-second budget, respecting Telegram’s `retry_after`.
-
-### Changed
-
-- Rendering errors now mention Telegram’s rich-message limits as well as
-  Markdown syntax. A byte download limit is not a rendered-character limit;
-  documents are never silently truncated or split.
-- **A release waits for CI.** `release.yml` runs `ci.yml` on the tagged commit
-  and publishes nothing unless it passed. When CI cannot run, `release.yml` can
-  be started by hand with the tag and a reason; that run skips CI and prints the
-  reason at the top of the release notes. See `docs/releases.md`.
-- The release notes end with the image digest to pin, which `docs/releases.md`
-  already said they did.
-- The image carries `org.opencontainers.image.version` and `.revision` labels,
-  so `docker inspect` names the build without starting it.
-- CI also runs weekly, so a new advisory against a dependency or the standard
-  library is noticed while nothing is being pushed.
-- Dependabot opens grouped version updates against `dev`.
-
 ## v0.1.2 - 2026-09-10
 
 makeitMD speaks sixteen languages.
