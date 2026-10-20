@@ -13,6 +13,46 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4 - 2026-10-20
+
+makeitMD renders Markdown sent as a text file, renders formulas the way
+ChatGPT, Gemini and Claude actually deliver them, and is built with a Go
+release that closes ten advisories `v0.1.2` is exposed to.
+
+This promotes `v0.1.4-alpha.5` unchanged. The five alphas ran on the
+production bot, which has no test twin. Answers from ChatGPT, Gemini and
+Claude were pasted from Telegram Desktop and from phones, and formula files
+were sent; the replies were checked on Desktop, Android and iOS. The failure
+path was exercised live too: four pastes that arrived as rich messages got the
+explanation instead of silence. The details are in the alpha sections below.
+
+There is no `v0.1.3`: that tag was pushed by mistake with unreviewed work,
+nothing was published from it, and tags here cannot be deleted.
+
+### Added
+
+- Markdown sent as a UTF-8 text file of up to 128 KB is rendered like a paste.
+- `\(...\)` and `\[...\]`, ChatGPT's delimiters, render as formulas, and so
+  do the doubled ones its copy button produces.
+- Display formulas that the ChatGPT and Gemini phone apps copy as bare LaTeX,
+  Gemini's inside a code block, are recovered in pastes that delimit no
+  formula. Inline formulas ChatGPT's app deletes while copying cannot be.
+- A paste that lost its headings, lists and tables is followed by advice:
+  paste without formatting, send a file, or on a phone send from a computer.
+
+### Fixed
+
+- A paste that arrives as a rich message, which Telegram Premium clients send,
+  gets an explanation instead of no answer at all.
+- A long paste from a phone is no longer stitched tail first.
+- Inline code restored from client formatting keeps its edge backticks and
+  spaces.
+
+### Security
+
+- Go 1.26.10 and `golang.org/x/text` 0.41.0: `govulncheck` found ten reachable
+  advisories on `v0.1.2` and finds none here.
+
 ## v0.1.4-alpha.5 - 2026-10-20
 
 Found by pasting chatbot answers from phones into alpha.4. Still on the
