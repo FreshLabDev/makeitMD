@@ -127,7 +127,15 @@ func entityDelimiters(content string, entity tg.MessageEntity) (string, string) 
 		return "<tg-spoiler>", "</tg-spoiler>"
 	case "code":
 		fence := strings.Repeat("`", longestBacktickRun(content)+1)
-		return fence, fence
+		// CommonMark trims one surrounding space when both ends have one.
+		// Padding separates edge backticks from the fence and preserves literal
+		// surrounding spaces that the parser would otherwise consume.
+		padding := ""
+		if strings.HasPrefix(content, "`") || strings.HasSuffix(content, "`") ||
+			(strings.HasPrefix(content, " ") && strings.HasSuffix(content, " ") && strings.Trim(content, " ") != "") {
+			padding = " "
+		}
+		return fence + padding, padding + fence
 	case "pre":
 		fence := strings.Repeat("`", max(3, longestBacktickRun(content)+1))
 		language := strings.Map(func(r rune) rune {

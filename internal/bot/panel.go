@@ -100,6 +100,8 @@ func rootScreen(lang string) screen {
 // their paste arrived as one message is reading this screen.
 func howScreen(lang string) screen {
 	body := i18n.T(lang, "how.body") + "\n\n" +
+		i18n.T(lang, "how.files") + "\n\n" + i18n.T(lang, "how.math") + "\n\n" +
+		i18n.T(lang, "how.limits") + "\n\n" +
 		i18n.T(lang, "how.engine", "bot", productName) + " " + i18n.T(lang, "how.split")
 	return screen{
 		text:   panelText(i18n.T(lang, "how.title"), i18n.T(lang, "how.hint"), body),
