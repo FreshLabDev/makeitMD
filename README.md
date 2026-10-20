@@ -81,6 +81,13 @@ document format. PDF, Word, archives, invalid UTF-8, and binary data are rejecte
 Captions are ignored. Each file is one conversion and is never joined to a
 nearby text message or another file.
 
+An ordinary paste of a chatbot's answer gives Telegram the clipboard's HTML,
+and the client keeps only what a plain message can hold: headings, lists,
+tables and LaTeX backslashes are gone before makeitMD receives the text. Paste
+without formatting (⌘⇧V, Ctrl+Shift+V) or send a file instead. When a long
+message arrives with a quote or text link and no heading, table or bullet line
+left, the reply is followed by that advice.
+
 Downloads use the shared Telegram client, have a 15-second budget including
 `getFile`, and are removed from a private temporary directory after processing.
 Accepted source and original document metadata follow the existing conversion
@@ -126,8 +133,14 @@ $$E=mc^2$$
 ````
 
 The formula source goes to Telegram unchanged. Telegram’s documented syntax is
-not a promise of full KaTeX or a complete TeX document engine. `\(...\)` and
-`\[...\]` are not documented rich-message delimiters; use the forms above.
+not a promise of full KaTeX or a complete TeX document engine.
+
+`\(...\)` and `\[...\]`, the delimiters ChatGPT writes, are the one rewrite:
+Markdown reads `\(` as an escaped parenthesis, so Telegram would show
+`(x^2)` instead of a formula. Outside code they become `$...$` and `$$...$$`.
+An escaped backslash (`\\(`) is left alone, and `\[...\]` is converted only
+when it stands on its own lines or contains LaTeX syntax, so `\[1\]` stays a
+bracketed reference.
 Putting `$...$` inside ordinary inline code or a non-`math` code block makes it
 code, not a formula. Receiving clients must support rich messages.
 

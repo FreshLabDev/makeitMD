@@ -8,9 +8,12 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/FreshLabDev/tg"
 
@@ -246,13 +249,15 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return nil
 	}
 	renderedMarkdown := richmarkdown.RestoreEntities(message.Text, message.Entities)
-	return b.convert(ctx, p, renderedMarkdown)
+	return b.convert(ctx, p, renderedMarkdown, lostPasteStructure(message))
 }
 
 // convert is shared by pasted text and downloaded text files. Only pastes
 // restore client entities; a document's caption never formats its contents.
-func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string) error {
+// pasteHint adds the paste-without-formatting advice after a delivered reply.
+func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string, pasteHint bool) error {
 	message := p.message
+	renderedMarkdown = richmarkdown.ConvertLaTeXDelimiters(renderedMarkdown)
 	conversionID, status, err := b.store.CreateConversion(ctx, p.updateID, *message, p.raws, renderedMarkdown)
 	if err != nil {
 		return err
@@ -281,6 +286,7 @@ func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string) err
 					}
 					metrics.ConversionsNormalized.Inc()
 					metrics.ConversionsSent.Inc()
+					b.sendPasteHint(ctx, message, pasteHint)
 					return nil
 				} else if !isBadRequest(retryErr) {
 					return retryErr
@@ -303,7 +309,73 @@ func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string) err
 		return err
 	}
 	metrics.ConversionsSent.Inc()
+	b.sendPasteHint(ctx, message, pasteHint)
 	return nil
+}
+
+// Pasting a chatbot's answer normally hands Telegram the clipboard's HTML, and
+// the client keeps only what a plain message can hold: headings, lists and
+// tables arrive as bare lines and LaTeX backslash escapes are gone before
+// makeitMD sees the text. Nothing here can rebuild them, so the sender is told
+// how to paste the source instead.
+//
+// A quote or a text link is what gives such a paste away: a plain-text paste
+// carries Markdown, which reaches the bot as text, not entities. A long message
+// with either and no heading, list or table line left is treated as one.
+const lostStructureMinLength = 600
+
+func lostPasteStructure(message *tg.Message) bool {
+	if utf8.RuneCountInString(message.Text) < lostStructureMinLength {
+		return false
+	}
+	richPaste := false
+	for _, entity := range message.Entities {
+		switch entity.Type {
+		case "blockquote", "expandable_blockquote", "text_link":
+			richPaste = true
+		}
+	}
+	if !richPaste {
+		return false
+	}
+	for _, line := range strings.Split(withoutCode(message.Text, message.Entities), "\n") {
+		if markdownBlockLine.MatchString(line) {
+			return false
+		}
+	}
+	return true
+}
+
+// A heading, table row or bullet still in the text means the Markdown arrived.
+// Numbered lines prove nothing: a rich paste keeps "1. Title" as plain text.
+var markdownBlockLine = regexp.MustCompile(`^\s{0,3}(#{1,6}\s|\||[-*+]\s)`)
+
+// withoutCode blanks the text under code entities, so a "# comment" inside a
+// pasted code block is not taken for a surviving heading.
+func withoutCode(text string, entities []tg.MessageEntity) string {
+	units := utf16.Encode([]rune(text))
+	for _, entity := range entities {
+		if entity.Type != "pre" && entity.Type != "code" {
+			continue
+		}
+		for i := max(entity.Offset, 0); i < min(entity.Offset+entity.Length, len(units)); i++ {
+			if units[i] != '\n' {
+				units[i] = ' '
+			}
+		}
+	}
+	return string(utf16.Decode(units))
+}
+
+// sendPasteHint follows a delivered reply, so a failure is logged and dropped:
+// returning it would retry an update whose conversion is already sent.
+func (b *Bot) sendPasteHint(ctx context.Context, message *tg.Message, wanted bool) {
+	if !wanted {
+		return
+	}
+	if err := b.sendText(ctx, message.Chat.ID, i18n.T(b.resolveLang(ctx, *message.From), "msg.paste_lost_structure")); err != nil {
+		b.log.Warn("paste hint failed", "error", err)
+	}
 }
 
 // handleGroupStart answers /start where makeitMD cannot work. The reply is

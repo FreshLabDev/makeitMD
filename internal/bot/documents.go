@@ -61,7 +61,7 @@ func (b *Bot) handleDocument(ctx context.Context, p paste) error {
 	combined.Entities = nil
 	combined.Raw = nil
 	p.message = &combined
-	return b.convert(ctx, p, strings.TrimPrefix(source, "\uFEFF"))
+	return b.convert(ctx, p, strings.TrimPrefix(source, "\uFEFF"), false)
 }
 
 // documentSource accepts text by content, not by a user-controlled extension

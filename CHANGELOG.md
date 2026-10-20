@@ -13,6 +13,24 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+### Added
+
+- **Formulas written as `\(...\)` and `\[...\]` render.** That is how
+  ChatGPT delimits them, and Markdown reads `\(` as an escaped parenthesis, so
+  Telegram showed `(7^{-\frac{2}{3}})` as text instead of a formula. Outside
+  code they now become `$...$` and `$$...$$`; a multi-line `\[...\]` becomes
+  one line. An escaped backslash and a bracketed reference such as `\[1\]` keep
+  their meaning. In a ChatGPT answer pasted on 20 October all fifteen formulas
+  were affected.
+- **Advice after a paste that lost its structure.** An ordinary paste of a
+  chatbot's answer hands Telegram the clipboard's HTML, and the client drops
+  headings, lists, tables and LaTeX backslashes before the bot sees the text.
+  A long message that arrives with a quote or text link and no heading, table
+  or bullet line left now gets one more message after the reply: paste without
+  formatting (⌘⇧V, Ctrl+Shift+V) or send a file. How it works says the same.
+  Of the three chatbot answers pasted on 20 October, all three would have got
+  it; the same answer pasted with ⌘⇧V would not.
+
 ## v0.1.4-alpha.1 - 2026-10-20
 
 makeitMD renders Markdown sent as a text file, and is built with a Go release

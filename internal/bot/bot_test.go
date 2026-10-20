@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
@@ -347,5 +348,105 @@ func TestResolvedLanguagePrefersTheSharedChoice(t *testing.T) {
 		if got := bot.resolveLang(context.Background(), user); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestLaTeXBracketDelimitersBecomeDollars(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	const source = "Ставка \\(r\\), код `\\(x\\)`\n\n\\[ FV=PV(1+r)^n \\]"
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(testUpdate(source))); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := client.rich[0], "Ставка $r$, код `\\(x\\)`\n\n$$FV=PV(1+r)^n$$"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// richPaste is what Telegram Desktop sends after an ordinary paste of a
+// chatbot's answer: the table and list are bare lines, the quote an entity.
+func richPaste() tg.Update {
+	text := "Ипотека\nКоротко о главном.\n" + strings.Repeat("ставка\nплатёж\nпереплата\n", 30)
+	update := testUpdate(text)
+	update.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 8, Length: 18}}
+	return update
+}
+
+func TestRichPasteGetsPasteAdviceAfterTheReply(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.rich) != 1 || store.sent != 1 {
+		t.Fatalf("reply not delivered: client=%+v store=%+v", client, store)
+	}
+	if len(client.texts) != 1 || client.texts[0] != i18n.T("en", "msg.paste_lost_structure") {
+		t.Fatalf("texts=%q", client.texts)
+	}
+}
+
+func TestPasteAdviceFailureDoesNotRetryTheUpdate(t *testing.T) {
+	client := &fakeTelegram{textErr: errors.New("network")}
+	store := &fakeStore{}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatalf("delivered conversion returned %v", err)
+	}
+}
+
+func TestNoPasteAdvice(t *testing.T) {
+	long := strings.Repeat("строка текста\n", 60)
+	for name, update := range map[string]tg.Update{
+		"short rich paste": func() tg.Update {
+			u := testUpdate("Короткая цитата и ссылка")
+			u.Message.Entities = []tg.MessageEntity{{Type: "text_link", Offset: 0, Length: 8, URL: "https://t.me"}}
+			return u
+		}(),
+		"plain-text paste keeps markdown": testUpdate("# Заголовок\n\n| a | b |\n|---|---|\n" + long),
+		"long text without rich entities": testUpdate(long),
+		"heading survived outside code": func() tg.Update {
+			u := testUpdate("## Раздел\n" + long)
+			u.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 0, Length: 7}}
+			return u
+		}(),
+		"structure survived": func() tg.Update {
+			u := testUpdate("- пункт\n" + long)
+			u.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 0, Length: 7}}
+			return u
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeTelegram{}
+			if err := newTestBot(client, &fakeStore{}).handle(context.Background(), testPaste(update)); err != nil {
+				t.Fatal(err)
+			}
+			if len(client.texts) != 0 {
+				t.Fatalf("unexpected advice: %q", client.texts)
+			}
+		})
+	}
+}
+
+func TestCodeCommentIsNotASurvivingHeading(t *testing.T) {
+	update := richPaste()
+	code := "# Расчет: 10 млн\nprint(1)"
+	update.Message.Text = code + "\n" + update.Message.Text
+	update.Message.Entities = []tg.MessageEntity{
+		{Type: "pre", Offset: 0, Length: utf16Length(code)},
+		{Type: "blockquote", Offset: utf16Length(code) + 1, Length: 5},
+	}
+	if !lostPasteStructure(update.Message) {
+		t.Fatal("a comment inside a code block hid a rich paste")
+	}
+}
+
+func TestReplayedRichPasteGetsNoSecondAdvice(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{status: db.ConversionSent}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || len(client.rich) != 0 {
+		t.Fatalf("replay sent again: %+v", client)
 	}
 }
