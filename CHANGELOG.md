@@ -13,6 +13,34 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4-alpha.5 - 2026-10-20
+
+Found by pasting chatbot answers from phones into alpha.4. Still on the
+production bot.
+
+### Fixed
+
+- **A long paste from a phone is no longer stitched tail first.** A phone
+  sends the parts of a split paste at once, and Telegram gave the 2637-character
+  tail of a chatbot answer a smaller message id than its 4067-character start,
+  so the reply began in the middle. When all parts arrive in the same second
+  and exactly one is shorter than 3000 UTF-16 units without being last, it is
+  the tail and moves to the end. Anything else keeps message id order, so a
+  short note typed before a paste stays first.
+- **Display formulas copied on a phone render.** Chatbot apps such as ChatGPT
+  copy a display formula as bare LaTeX, with no delimiters; one app puts it in
+  a code block. In a paste whose source delimits no formula, a line or a
+  language-less code block that reads as a formula now becomes `$$...$$`: a
+  LaTeX command next to math, or a sub/superscript with a relation, and no
+  word of three or more letters once commands and braced arguments are
+  removed. A `\begin{cases}` split over lines and a formula a phone broke in
+  two are joined. On the test answers this recovered 7 of ChatGPT's display
+  formulas and 5 of another app's, and changed nothing in 17 earlier pastes.
+  ChatGPT's app deletes inline formulas while copying; those cannot come back.
+- **The paste advice tells phone users what to do.** ⌘⇧V does not exist on a
+  phone, and chatbot apps there lose headings, lists and tables while copying,
+  so the advice now says to send from a computer.
+
 ## v0.1.4-alpha.4 - 2026-10-20
 
 Found by pasting a Claude answer copied in the iPhone app: the bot did not
