@@ -5,8 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/FreshLabDev/makeitMD/internal/build"
@@ -23,9 +27,12 @@ type fakeStore struct {
 	langErr error
 	// set records the language written to the hub, cleared counts withdrawals,
 	// and writeErr is the hub refusing both.
-	set      string
-	cleared  int
-	writeErr error
+	set           string
+	cleared       int
+	writeErr      error
+	sourceMessage tg.Message
+	sourceRaws    []json.RawMessage
+	lookupErr     error
 }
 
 func (s *fakeStore) Offset(context.Context) (int64, error)      { return 0, nil }
@@ -52,8 +59,12 @@ func (s *fakeStore) ClearLanguage(context.Context, int64) error {
 	s.set, s.lang = "", ""
 	return nil
 }
-func (s *fakeStore) CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error) {
+func (s *fakeStore) ConversionStatus(context.Context, int64) (db.ConversionStatus, error) {
+	return s.status, s.lookupErr
+}
+func (s *fakeStore) CreateConversion(_ context.Context, _ int64, message tg.Message, raws []json.RawMessage, _ string) (int64, db.ConversionStatus, error) {
 	s.created++
+	s.sourceMessage, s.sourceRaws = message, raws
 	status := s.status
 	if status == "" {
 		status = db.ConversionReceived
@@ -83,6 +94,14 @@ type fakeTelegram struct {
 	edits                        []sentMessage
 	answered                     []string
 	scopes                       map[string][]tg.BotCommand
+	file                         tg.File
+	fileErr, downloadErr         error
+	downloadErrors               []error
+	fileContent                  []byte
+	files, downloads             int
+	downloadPath                 string
+	downloadLimit                int64
+	downloadContext              context.Context
 }
 
 func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.BotCommand, scope *tg.BotCommandScope) error {
@@ -100,6 +119,21 @@ func (f *fakeTelegram) SetMyCommandsForScope(_ context.Context, commands []tg.Bo
 	return nil
 }
 func (f *fakeTelegram) GetUpdates(context.Context, int64, int) ([]tg.Update, error) { return nil, nil }
+func (f *fakeTelegram) GetFile(_ context.Context, _ string) (tg.File, error) {
+	f.files++
+	return f.file, f.fileErr
+}
+func (f *fakeTelegram) DownloadToFile(ctx context.Context, _ string, dst string, maxBytes int64) error {
+	f.downloads++
+	f.downloadPath, f.downloadLimit, f.downloadContext = dst, maxBytes, ctx
+	if err := os.WriteFile(dst, f.fileContent, 0600); err != nil {
+		return err
+	}
+	if f.downloads <= len(f.downloadErrors) {
+		return f.downloadErrors[f.downloads-1]
+	}
+	return f.downloadErr
+}
 func (f *fakeTelegram) SendMessage(_ context.Context, _ int64, text string, markup *tg.InlineKeyboardMarkup) (tg.Message, error) {
 	f.messages = append(f.messages, sentMessage{text: text, markup: markup})
 	return tg.Message{MessageID: 42}, f.messageErr
@@ -316,5 +350,205 @@ func TestResolvedLanguagePrefersTheSharedChoice(t *testing.T) {
 		if got := bot.resolveLang(context.Background(), user); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestLaTeXBracketDelimitersBecomeDollars(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	const source = "Ставка \\(r\\), код `\\(x\\)`\n\n\\[ FV=PV(1+r)^n \\]"
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(testUpdate(source))); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := client.rich[0], "Ставка $r$, код `\\(x\\)`\n\n$$FV=PV(1+r)^n$$"; got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// richPaste is what Telegram Desktop sends after an ordinary paste of a
+// chatbot's answer: the table and list are bare lines, the quote an entity.
+func richPaste() tg.Update {
+	text := "Ипотека\nКоротко о главном.\n" + strings.Repeat("ставка\nплатёж\nпереплата\n", 30)
+	update := testUpdate(text)
+	update.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 8, Length: 18}}
+	return update
+}
+
+func TestRichPasteGetsPasteAdviceAfterTheReply(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.rich) != 1 || store.sent != 1 {
+		t.Fatalf("reply not delivered: client=%+v store=%+v", client, store)
+	}
+	if len(client.texts) != 1 || client.texts[0] != i18n.T("en", "msg.paste_lost_structure") {
+		t.Fatalf("texts=%q", client.texts)
+	}
+}
+
+func TestPasteAdviceFailureDoesNotRetryTheUpdate(t *testing.T) {
+	client := &fakeTelegram{textErr: errors.New("network")}
+	store := &fakeStore{}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatalf("delivered conversion returned %v", err)
+	}
+}
+
+func TestNoPasteAdvice(t *testing.T) {
+	long := strings.Repeat("строка текста\n", 60)
+	for name, update := range map[string]tg.Update{
+		"short rich paste": func() tg.Update {
+			u := testUpdate("Короткая цитата и ссылка")
+			u.Message.Entities = []tg.MessageEntity{{Type: "text_link", Offset: 0, Length: 8, URL: "https://t.me"}}
+			return u
+		}(),
+		"plain-text paste keeps markdown": testUpdate("# Заголовок\n\n| a | b |\n|---|---|\n" + long),
+		"long text without rich entities": testUpdate(long),
+		"heading survived outside code": func() tg.Update {
+			u := testUpdate("## Раздел\n" + long)
+			u.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 0, Length: 7}}
+			return u
+		}(),
+		"structure survived": func() tg.Update {
+			u := testUpdate("- пункт\n" + long)
+			u.Message.Entities = []tg.MessageEntity{{Type: "blockquote", Offset: 0, Length: 7}}
+			return u
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := &fakeTelegram{}
+			if err := newTestBot(client, &fakeStore{}).handle(context.Background(), testPaste(update)); err != nil {
+				t.Fatal(err)
+			}
+			if len(client.texts) != 0 {
+				t.Fatalf("unexpected advice: %q", client.texts)
+			}
+		})
+	}
+}
+
+func TestCodeCommentIsNotASurvivingHeading(t *testing.T) {
+	update := richPaste()
+	code := "# Расчет: 10 млн\nprint(1)"
+	update.Message.Text = code + "\n" + update.Message.Text
+	update.Message.Entities = []tg.MessageEntity{
+		{Type: "pre", Offset: 0, Length: utf16Length(code)},
+		{Type: "blockquote", Offset: utf16Length(code) + 1, Length: 5},
+	}
+	if !lostPasteStructure(update.Message) {
+		t.Fatal("a comment inside a code block hid a rich paste")
+	}
+}
+
+func TestReplayedRichPasteGetsNoSecondAdvice(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{status: db.ConversionSent}
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(richPaste())); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || len(client.rich) != 0 {
+		t.Fatalf("replay sent again: %+v", client)
+	}
+}
+
+const richMessageUpdate = `{"update_id":5,"message":{"message_id":3,"date":100,"chat":{"id":7,"type":"%s"},"from":{"id":7,"is_bot":false,"first_name":"A"},` +
+	`"rich_message":{"blocks":[{"type":"section_heading","text":"Ипотека"},{"type":"paragraph","text":[{"type":"bold","text":"ставка"}," и платёж"]},{"type":"paragraph","text":"ещё"}]}}}`
+
+// A client can send pasted rich text as a rich message, with no text. The bot
+// says why it cannot render that instead of ignoring it, and stores nothing.
+func TestRichMessageGetsAnExplanation(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "private"))
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 1 || client.texts[0] != i18n.T("en", "msg.rich_message") {
+		t.Fatalf("texts=%q", client.texts)
+	}
+	if len(client.rich) != 0 || store.created != 0 || store.touched != 1 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestRichMessageInGroupIsIgnored(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "supergroup"))
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || len(client.messages) != 0 || store.touched != 0 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestMessageWithoutTextOrRichMessageIsIgnored(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, `{"update_id":5,"message":{"message_id":3,"date":100,"chat":{"id":7,"type":"private"},"from":{"id":7,"is_bot":false,"first_name":"A"},"sticker":{"file_id":"x"}}}`)
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || store.touched != 0 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestRichMessageTypesCountsTypesOnly(t *testing.T) {
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "private"))
+	got := richMessageTypes(update.Message)
+	want := map[string]int{"section_heading": 1, "paragraph": 2, "bold": 1}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func splitPart(updateID, messageID, date int64, text string, entities ...tg.MessageEntity) tg.Update {
+	update := testUpdateWithIDs(updateID, messageID, date, text)
+	update.Message.Entities = entities
+	return update
+}
+
+// A phone sent a split paste with the tail under the smaller message id.
+func TestSplitPasteWithTailFirstIsReordered(t *testing.T) {
+	head := strings.Repeat("начало ", 600) // 4200 UTF-16 units
+	tail := "конец"
+	updates := []tg.Update{
+		splitPart(1, 194, 100, tail, tg.MessageEntity{Type: "bold", Offset: 0, Length: 5}),
+		splitPart(2, 195, 100, head, tg.MessageEntity{Type: "italic", Offset: 0, Length: 6}),
+	}
+	grouped, last := groupTextUpdates(updates, 0)
+	if last != 1 || grouped.updateID != 1 || grouped.message.MessageID != 194 {
+		t.Fatalf("last=%d update=%d message=%d", last, grouped.updateID, grouped.message.MessageID)
+	}
+	if grouped.message.Text != head+"\n"+tail {
+		t.Fatalf("text starts %q", grouped.message.Text[:20])
+	}
+	want := []tg.MessageEntity{{Type: "italic", Offset: 0, Length: 6}, {Type: "bold", Offset: utf16Length(head) + 1, Length: 5}}
+	if !reflect.DeepEqual(grouped.message.Entities, want) {
+		t.Fatalf("entities=%+v", grouped.message.Entities)
+	}
+}
+
+func TestSplitPasteOrderIsKept(t *testing.T) {
+	full := strings.Repeat("слово ", 700)
+	for name, tc := range map[string]struct {
+		parts []tg.Update
+		want  string
+	}{
+		"already in order":          {[]tg.Update{splitPart(1, 1, 100, full), splitPart(2, 2, 100, "хвост")}, full + "\nхвост"},
+		"note typed before a paste": {[]tg.Update{splitPart(1, 1, 100, "переведи"), splitPart(2, 2, 101, full)}, "переведи\n" + full},
+		"two short parts":           {[]tg.Update{splitPart(1, 1, 100, "a"), splitPart(2, 2, 100, "b"), splitPart(3, 3, 100, full)}, "a\nb\n" + full},
+		"all full":                  {[]tg.Update{splitPart(1, 1, 100, full+"1"), splitPart(2, 2, 100, full+"2")}, full + "1\n" + full + "2"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			grouped, _ := groupTextUpdates(tc.parts, 0)
+			if grouped.message.Text != tc.want {
+				t.Fatalf("got %d chars starting %q", len(grouped.message.Text), grouped.message.Text[:12])
+			}
+		})
 	}
 }

@@ -13,6 +13,189 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4 - 2026-10-20
+
+makeitMD renders Markdown sent as a text file, renders formulas the way
+ChatGPT, Gemini and Claude actually deliver them, and is built with a Go
+release that closes ten advisories `v0.1.2` is exposed to.
+
+This promotes `v0.1.4-alpha.5` unchanged. The five alphas ran on the
+production bot, which has no test twin. Answers from ChatGPT, Gemini and
+Claude were pasted from Telegram Desktop and from phones, and formula files
+were sent; the replies were checked on Desktop, Android and iOS. The failure
+path was exercised live too: four pastes that arrived as rich messages got the
+explanation instead of silence. The details are in the alpha sections below.
+
+There is no `v0.1.3`: that tag was pushed by mistake with unreviewed work,
+nothing was published from it, and tags here cannot be deleted.
+
+### Added
+
+- Markdown sent as a UTF-8 text file of up to 128 KB is rendered like a paste.
+- `\(...\)` and `\[...\]`, ChatGPT's delimiters, render as formulas, and so
+  do the doubled ones its copy button produces.
+- Display formulas that the ChatGPT and Gemini phone apps copy as bare LaTeX,
+  Gemini's inside a code block, are recovered in pastes that delimit no
+  formula. Inline formulas ChatGPT's app deletes while copying cannot be.
+- A paste that lost its headings, lists and tables is followed by advice:
+  paste without formatting, send a file, or on a phone send from a computer.
+
+### Fixed
+
+- A paste that arrives as a rich message, which Telegram Premium clients send,
+  gets an explanation instead of no answer at all.
+- A long paste from a phone is no longer stitched tail first.
+- Inline code restored from client formatting keeps its edge backticks and
+  spaces.
+
+### Security
+
+- Go 1.26.10 and `golang.org/x/text` 0.41.0: `govulncheck` found ten reachable
+  advisories on `v0.1.2` and finds none here.
+
+## v0.1.4-alpha.5 - 2026-10-20
+
+Found by pasting chatbot answers from phones into alpha.4. Still on the
+production bot.
+
+### Fixed
+
+- **A long paste from a phone is no longer stitched tail first.** A phone
+  sends the parts of a split paste at once, and Telegram gave the 2637-character
+  tail of a chatbot answer a smaller message id than its 4067-character start,
+  so the reply began in the middle. When all parts arrive in the same second
+  and exactly one is shorter than 3000 UTF-16 units without being last, it is
+  the tail and moves to the end. Anything else keeps message id order, so a
+  short note typed before a paste stays first.
+- **Display formulas copied on a phone render.** Chatbot apps such as ChatGPT
+  copy a display formula as bare LaTeX, with no delimiters; one app puts it in
+  a code block. In a paste whose source delimits no formula, a line or a
+  language-less code block that reads as a formula now becomes `$$...$$`: a
+  LaTeX command next to math, or a sub/superscript with a relation, and no
+  word of three or more letters once commands and braced arguments are
+  removed. A `\begin{cases}` split over lines and a formula a phone broke in
+  two are joined. On the test answers this recovered 7 of ChatGPT's display
+  formulas and 5 of another app's, and changed nothing in 17 earlier pastes.
+  ChatGPT's app deletes inline formulas while copying; those cannot come back.
+- **The paste advice tells phone users what to do.** ⌘⇧V does not exist on a
+  phone, and chatbot apps there lose headings, lists and tables while copying,
+  so the advice now says to send from a computer.
+
+## v0.1.4-alpha.4 - 2026-10-20
+
+Found by pasting a Claude answer copied in the iPhone app: the bot did not
+answer at all. Still on the production bot.
+
+### Fixed
+
+- **A message that arrives already formatted gets an answer.** Since Bot API
+  10.1 a Telegram client can send a paste as a rich message: blocks, with no
+  text field and no Markdown source. The bot ignored such messages without a
+  word. It now explains that it cannot read them and suggests a .md file or a
+  paste without formatting. Nothing is stored, and the log records only how
+  many blocks of each type arrived, to find out what clients send before
+  deciding whether to render them.
+
+## v0.1.4-alpha.3 - 2026-10-20
+
+Found by pasting a ChatGPT answer into alpha.2 with ⌘⇧V. Still on the
+production bot.
+
+### Fixed
+
+- **ChatGPT formulas pasted as plain text render.** ChatGPT's copy button
+  escapes its Markdown once more, so the plain text holds `\\[ 1\\,000 \\]`
+  and `\\(PV\\)`. alpha.2 read the doubled backslash as an escaped backslash
+  and left every formula of the test answer as text. Doubled delimiters are
+  now formulas too, with Markdown escapes such as `\_` and `\&` removed from
+  the content. They are converted only when at least one holds LaTeX syntax,
+  so a lone `C:\\(x86\\)` stays text.
+
+## v0.1.4-alpha.2 - 2026-10-20
+
+Found by pasting answers from three chatbots into alpha.1: ChatGPT's formulas
+did not render, and an ordinary paste lost tables and lists before the bot saw
+them. Still on the production bot.
+
+### Added
+
+- **Formulas written as `\(...\)` and `\[...\]` render.** That is how
+  ChatGPT delimits them, and Markdown reads `\(` as an escaped parenthesis, so
+  Telegram showed `(7^{-\frac{2}{3}})` as text instead of a formula. Outside
+  code they now become `$...$` and `$$...$$`; a multi-line `\[...\]` becomes
+  one line. An escaped backslash and a bracketed reference such as `\[1\]` keep
+  their meaning. In a ChatGPT answer pasted on 20 October all fifteen formulas
+  were affected.
+- **Advice after a paste that lost its structure.** An ordinary paste of a
+  chatbot's answer hands Telegram the clipboard's HTML, and the client drops
+  headings, lists, tables and LaTeX backslashes before the bot sees the text.
+  A long message that arrives with a quote or text link and no heading, table
+  or bullet line left now gets one more message after the reply: paste without
+  formatting (⌘⇧V, Ctrl+Shift+V) or send a file. How it works says the same.
+  Of the three chatbot answers pasted on 20 October, all three would have got
+  it; the same answer pasted with ⌘⇧V would not.
+
+## v0.1.4-alpha.1 - 2026-10-20
+
+makeitMD renders Markdown sent as a text file, and is built with a Go release
+that closes ten advisories the running `v0.1.2` is exposed to.
+
+makeitMD has no test bot, so this alpha runs on the production bot. It becomes
+`v0.1.4` once formulas from `docs/examples/formulas.md` sent as a file render
+correctly on Telegram Desktop, Android and iOS, or is rolled back to `v0.1.2`.
+
+There is no `v0.1.3`. That tag was pushed by mistake on 20 October with work
+that had not been reviewed, nothing was published from it, and tags here
+cannot be deleted.
+
+### Added
+
+- **Markdown can be sent as a file.** A UTF-8 text file of up to 128 KB gets
+  the same native rich reply as pasted Markdown, whatever its extension: `.md`,
+  `.txt`, `.tex` or none. Text is recognised by its contents, not by the name or
+  MIME type Telegram reports. Captions are ignored, and a file is never joined
+  to a neighbouring message. An empty, binary or non-UTF-8 file, a PDF and a
+  file over the limit each get a short explanation instead. The download has
+  15 seconds including `getFile`, retries a transient failure up to three
+  times within that budget, and goes to a private temporary directory that is
+  removed afterwards. Accepted files follow the existing conversion retention;
+  rejected ones are not stored. In groups a file is not downloaded at all.
+- How it works explains files, formulas (`$...$`, `$$...$$` and fenced
+  `math`) and Telegram's limits on a rich message. Formula source is passed to
+  Telegram unchanged; `\(...\)` and `\[...\]` are not rewritten.
+
+### Security
+
+- Go moves from 1.26.6 to 1.26.10 and `golang.org/x/text` from 0.39.0 to
+  0.41.0. On `v0.1.2` `govulncheck` finds ten advisories reachable from
+  makeitMD's code, nine in the standard library (among them GO-2026-6611,
+  -6612, -6613 and -6617 in `net/http` and HTTP/2) and GO-2026-6629 in
+  `x/text`; on this version it finds none.
+
+### Fixed
+
+- Inline code restored from a client's formatting kept its edge backticks and
+  surrounding spaces wrong: a span starting or ending with a backtick merged
+  with the delimiter, and a span with a space at both ends lost them. Both now
+  come back as the person typed them.
+
+### Changed
+
+- Rendering errors now mention Telegram’s rich-message limits as well as
+  Markdown syntax. A byte download limit is not a rendered-character limit;
+  documents are never silently truncated or split.
+- **A release waits for CI.** `release.yml` runs `ci.yml` on the tagged commit
+  and publishes nothing unless it passed. When CI cannot run, `release.yml` can
+  be started by hand with the tag and a reason; that run skips CI and prints the
+  reason at the top of the release notes. See `docs/releases.md`.
+- The release notes end with the image digest to pin, which `docs/releases.md`
+  already said they did.
+- The image carries `org.opencontainers.image.version` and `.revision` labels,
+  so `docker inspect` names the build without starting it.
+- CI also runs weekly, so a new advisory against a dependency or the standard
+  library is noticed while nothing is being pushed.
+- Dependabot opens grouped version updates against `dev`.
+
 ## v0.1.2 - 2026-09-10
 
 makeitMD speaks sixteen languages.

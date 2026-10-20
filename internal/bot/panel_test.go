@@ -62,8 +62,10 @@ func TestEveryScreenOpensWithATitleAndAHint(t *testing.T) {
 			t.Errorf("%s says its substance outside a quote: %q", name, view.text)
 		}
 		// A string the catalogue is missing renders as its own key.
-		if strings.Contains(view.text, "[") && strings.Contains(view.text, "]") {
-			t.Errorf("%s carries an unrendered key: %q", name, view.text)
+		for _, key := range i18n.Keys() {
+			if strings.Contains(view.text, "["+key+"]") {
+				t.Errorf("%s carries an unrendered key: %q", name, view.text)
+			}
 		}
 	}
 }

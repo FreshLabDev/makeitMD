@@ -50,6 +50,25 @@ Keep makeitMD minimal, private by default, and production-minded.
 - Render text only in private chats. Pass plain source unchanged; when a Telegram
   client has consumed formatting into `Message.entities`, deterministically
   restore only those entity ranges before calling Bot API 10.1 `sendRichMessage`.
+- Two source rewrites, no more. First: `\(...\)` and `\[...\]` become `$...$` and `$$...$$`
+  outside code (`richmarkdown.ConvertLaTeXDelimiters`), and so do the doubled
+  `\\(...\\)` and `\\[...\\]` of ChatGPT's copy button, with Markdown escapes
+  removed from the content. It is a delimiter
+  scanner, not a Markdown parser; keep it that narrow. Second, pastes only:
+  `richmarkdown.WrapBareFormulas` wraps lines and language-less code blocks of
+  bare LaTeX in `$$...$$` when the source delimits no formula. A line qualifies
+  only with no word of three or more letters left; do not loosen that.
+- Text documents use the same conversion path. Accept UTF-8 by content, up to
+  128 KiB; strip only an initial BOM for rendering and retain the original
+  decoded source. Ignore captions and never join documents into pasted text.
+  Download through `tg` with a 15-second budget into a private temporary
+  directory, then remove it. Never execute or extract uploaded documents.
+- A paste the client split into consecutive messages is one conversion
+  (`groupTextUpdates`). Keep message id order except the one case in
+  `pasteOrder`: a phone can give the short tail the smaller id.
+- A private message with no text but a `rich_message` (read from `Message.Raw`;
+  `tg` does not model it) gets `msg.rich_message` and nothing else: no
+  conversion row. Log block and rich-text type counts only, never content.
 - In a group the bot renders nothing. `/start` is registered there with
   `is_ephemeral`, so the command and its answer are visible only to the person
   who typed it; without an ephemeral id to answer, stay silent rather than post

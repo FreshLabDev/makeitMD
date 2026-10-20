@@ -46,3 +46,19 @@ func TestRestoreEntitiesIgnoresLexicalEntities(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestRestoreInlineCodeSeparatesEdgeBackticksAndPreservesSpaces(t *testing.T) {
+	for _, tc := range []struct{ source, want string }{
+		{"`x", "`` `x ``"},
+		{"x`", "`` x` ``"},
+		{"``", "``` `` ```"},
+		{" x ", "`  x  `"},
+		{"   ", "`   `"},
+		{"x", "`x`"},
+	} {
+		entity := tg.MessageEntity{Type: "code", Offset: 0, Length: len(tc.source)}
+		if got := RestoreEntities(tc.source, []tg.MessageEntity{entity}); got != tc.want {
+			t.Errorf("source=%q got=%q want=%q", tc.source, got, tc.want)
+		}
+	}
+}

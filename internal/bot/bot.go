@@ -8,9 +8,12 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/FreshLabDev/tg"
 
@@ -33,6 +36,7 @@ type Store interface {
 	EffectiveLanguage(context.Context, int64) (string, bool, error)
 	SetLanguage(context.Context, int64, string) error
 	ClearLanguage(context.Context, int64) error
+	ConversionStatus(context.Context, int64) (db.ConversionStatus, error)
 	CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error)
 	MarkSent(context.Context, int64, string, db.Result, []db.DeliveryAttempt) error
 	MarkFailed(context.Context, int64, string, string, db.Result, []db.DeliveryAttempt) error
@@ -43,6 +47,8 @@ type Store interface {
 type Telegram interface {
 	SetMyCommandsForScope(context.Context, []tg.BotCommand, *tg.BotCommandScope) error
 	GetUpdates(context.Context, int64, int) ([]tg.Update, error)
+	GetFile(context.Context, string) (tg.File, error)
+	DownloadToFile(context.Context, string, string, int64) error
 	SendMessage(context.Context, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
 	SendPlainText(context.Context, int64, string) (tg.Message, error)
 	SendEphemeralMessage(context.Context, int64, int64, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
@@ -224,7 +230,11 @@ func (b *Bot) LastPoll() time.Time {
 
 func (b *Bot) handle(ctx context.Context, p paste) error {
 	message := p.message
-	if message == nil || message.From == nil || message.From.IsBot || message.Text == "" {
+	if message == nil || message.From == nil || message.From.IsBot {
+		return nil
+	}
+	richTypes := richMessageTypes(message)
+	if message.Text == "" && message.Document == nil && (richTypes == nil || message.Chat.Type != "private") {
 		return nil
 	}
 	if message.Chat.Type != "private" {
@@ -233,6 +243,12 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	if err := b.store.Touch(ctx, *message.From); err != nil {
 		return err
 	}
+	if message.Document != nil {
+		return b.handleDocument(ctx, p)
+	}
+	if message.Text == "" {
+		return b.handleRichMessage(ctx, message, richTypes)
+	}
 	if isStartCommand(message.Text) {
 		return b.sendScreen(ctx, message.Chat.ID, rootScreen(b.resolveLang(ctx, *message.From)))
 	}
@@ -240,6 +256,18 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return nil
 	}
 	renderedMarkdown := richmarkdown.RestoreEntities(message.Text, message.Entities)
+	// Only pastes: a phone app copies display formulas without delimiters. A
+	// file is what its author wrote.
+	renderedMarkdown = richmarkdown.WrapBareFormulas(renderedMarkdown)
+	return b.convert(ctx, p, renderedMarkdown, lostPasteStructure(message))
+}
+
+// convert is shared by pasted text and downloaded text files. Only pastes
+// restore client entities; a document's caption never formats its contents.
+// pasteHint adds the paste-without-formatting advice after a delivered reply.
+func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string, pasteHint bool) error {
+	message := p.message
+	renderedMarkdown = richmarkdown.ConvertLaTeXDelimiters(renderedMarkdown)
 	conversionID, status, err := b.store.CreateConversion(ctx, p.updateID, *message, p.raws, renderedMarkdown)
 	if err != nil {
 		return err
@@ -268,6 +296,7 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 					}
 					metrics.ConversionsNormalized.Inc()
 					metrics.ConversionsSent.Inc()
+					b.sendPasteHint(ctx, message, pasteHint)
 					return nil
 				} else if !isBadRequest(retryErr) {
 					return retryErr
@@ -290,7 +319,121 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return err
 	}
 	metrics.ConversionsSent.Inc()
+	b.sendPasteHint(ctx, message, pasteHint)
 	return nil
+}
+
+// Pasting a chatbot's answer normally hands Telegram the clipboard's HTML, and
+// the client keeps only what a plain message can hold: headings, lists and
+// tables arrive as bare lines and LaTeX backslash escapes are gone before
+// makeitMD sees the text. Nothing here can rebuild them, so the sender is told
+// how to paste the source instead.
+//
+// A quote or a text link is what gives such a paste away: a plain-text paste
+// carries Markdown, which reaches the bot as text, not entities. A long message
+// with either and no heading, list or table line left is treated as one.
+const lostStructureMinLength = 600
+
+func lostPasteStructure(message *tg.Message) bool {
+	if utf8.RuneCountInString(message.Text) < lostStructureMinLength {
+		return false
+	}
+	richPaste := false
+	for _, entity := range message.Entities {
+		switch entity.Type {
+		case "blockquote", "expandable_blockquote", "text_link":
+			richPaste = true
+		}
+	}
+	if !richPaste {
+		return false
+	}
+	for _, line := range strings.Split(withoutCode(message.Text, message.Entities), "\n") {
+		if markdownBlockLine.MatchString(line) {
+			return false
+		}
+	}
+	return true
+}
+
+// A heading, table row or bullet still in the text means the Markdown arrived.
+// Numbered lines prove nothing: a rich paste keeps "1. Title" as plain text.
+var markdownBlockLine = regexp.MustCompile(`^\s{0,3}(#{1,6}\s|\||[-*+]\s)`)
+
+// withoutCode blanks the text under code entities, so a "# comment" inside a
+// pasted code block is not taken for a surviving heading.
+func withoutCode(text string, entities []tg.MessageEntity) string {
+	units := utf16.Encode([]rune(text))
+	for _, entity := range entities {
+		if entity.Type != "pre" && entity.Type != "code" {
+			continue
+		}
+		for i := max(entity.Offset, 0); i < min(entity.Offset+entity.Length, len(units)); i++ {
+			if units[i] != '\n' {
+				units[i] = ' '
+			}
+		}
+	}
+	return string(utf16.Decode(units))
+}
+
+// sendPasteHint follows a delivered reply, so a failure is logged and dropped:
+// returning it would retry an update whose conversion is already sent.
+func (b *Bot) sendPasteHint(ctx context.Context, message *tg.Message, wanted bool) {
+	if !wanted {
+		return
+	}
+	if err := b.sendText(ctx, message.Chat.ID, i18n.T(b.resolveLang(ctx, *message.From), "msg.paste_lost_structure")); err != nil {
+		b.log.Warn("paste hint failed", "error", err)
+	}
+}
+
+// handleRichMessage answers a message a client sent already formatted. Since
+// Bot API 10.1 a client may turn pasted rich text into a rich message: blocks,
+// with no text field and no Markdown source to render. Nothing is converted or
+// stored. The log keeps only how many blocks of each type arrived, never their
+// content, to show what clients actually send.
+func (b *Bot) handleRichMessage(ctx context.Context, message *tg.Message, types map[string]int) error {
+	b.log.Info("rich message received", "types", types)
+	return b.sendText(ctx, message.Chat.ID, i18n.T(b.resolveLang(ctx, *message.From), "msg.rich_message"))
+}
+
+// richMessageTypes counts the block and rich-text types of message's
+// rich_message, read from the raw update because tg does not model it. It
+// returns nil when the message has none.
+func richMessageTypes(message *tg.Message) map[string]int {
+	if len(message.Raw) == 0 {
+		return nil
+	}
+	var raw struct {
+		RichMessage json.RawMessage `json:"rich_message"`
+	}
+	if json.Unmarshal(message.Raw, &raw) != nil || len(raw.RichMessage) == 0 || string(raw.RichMessage) == "null" {
+		return nil
+	}
+	var tree any
+	if json.Unmarshal(raw.RichMessage, &tree) != nil {
+		return nil
+	}
+	types := map[string]int{}
+	var walk func(any)
+	walk = func(node any) {
+		switch node := node.(type) {
+		case map[string]any:
+			if kind, ok := node["type"].(string); ok {
+				types[kind]++
+			}
+			for _, child := range node {
+				walk(child)
+			}
+		case []any:
+			for _, child := range node {
+				walk(child)
+			}
+		}
+	}
+	walk(tree)
+	return types
 }
 
 // handleGroupStart answers /start where makeitMD cannot work. The reply is
@@ -469,29 +612,69 @@ func groupTextUpdates(updates []tg.Update, start int) (paste, int) {
 	if !batchableMessage(first.Message) {
 		return paste{updateID: first.UpdateID, message: first.Message, raws: rawsOf(first.Message)}, start
 	}
-	combined := *first.Message
-	combined.Entities = append([]tg.MessageEntity(nil), first.Message.Entities...)
+	parts := []*tg.Message{first.Message}
 	raws := rawsOf(first.Message)
 	last := start
 	for next := start + 1; next < len(updates); next++ {
 		candidate := updates[next].Message
-		previous := updates[last].Message
-		if !samePaste(previous, candidate) {
+		if !samePaste(updates[last].Message, candidate) {
 			break
 		}
-		offset := utf16Length(combined.Text) + 1
-		combined.Text += "\n" + candidate.Text
+		parts = append(parts, candidate)
 		raws = append(raws, rawsOf(candidate)...)
-		for _, entity := range candidate.Entities {
+		last = next
+	}
+	combined := *first.Message
+	combined.Text = ""
+	combined.Entities = nil
+	for i, part := range pasteOrder(parts) {
+		offset := 0
+		if i > 0 {
+			offset = utf16Length(combined.Text) + 1
+			combined.Text += "\n"
+		}
+		combined.Text += part.Text
+		for _, entity := range part.Entities {
 			entity.Offset += offset
 			combined.Entities = append(combined.Entities, entity)
 		}
-		last = next
 	}
 	// The stitched message is synthetic: it has no original of its own, so its
-	// Raw would describe only the first part.
+	// Raw would describe only the first part. raws keep Telegram's order.
 	combined.Raw = nil
 	return paste{updateID: first.UpdateID, message: &combined, raws: raws}, last
+}
+
+// A client splits a long paste into messages of up to 4096 UTF-16 units, so
+// every part but the last is nearly full. Observed parts were 3721 or longer,
+// tails 314 to 3054.
+const fullPartLength = 3000
+
+// pasteOrder returns the parts in reading order. A phone sends the parts of a
+// split paste at once, and the tail can be given the smaller message id. When
+// all parts carry the same second and exactly one is short but not last, it is
+// the tail and goes to the end. Anything else keeps message id order: a short
+// note typed before a long paste takes longer than a second.
+func pasteOrder(parts []*tg.Message) []*tg.Message {
+	short := -1
+	for i, part := range parts {
+		if part.Date != parts[0].Date {
+			return parts
+		}
+		if utf16Length(part.Text) < fullPartLength {
+			if short >= 0 {
+				return parts
+			}
+			short = i
+		}
+	}
+	if short < 0 || short == len(parts)-1 {
+		return parts
+	}
+	ordered := make([]*tg.Message, 0, len(parts))
+	ordered = append(ordered, parts[:short]...)
+	ordered = append(ordered, parts[short+1:]...)
+	return append(ordered, parts[short])
 }
 
 // rawsOf returns the message exactly as Telegram sent it, or nothing when the
