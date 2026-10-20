@@ -88,6 +88,11 @@ without formatting (⌘⇧V, Ctrl+Shift+V) or send a file instead. When a long
 message arrives with a quote or text link and no heading, table or bullet line
 left, the reply is followed by that advice.
 
+A client can also send a paste as a rich message (Bot API 10.1): formatted
+blocks with no text and no Markdown source. makeitMD does not render those; it
+answers with the same advice and stores nothing. Its log records only how many
+blocks of each type arrived.
+
 Downloads use the shared Telegram client, have a 15-second budget including
 `getFile`, and are removed from a private temporary directory after processing.
 Accepted source and original document metadata follow the existing conversion

@@ -574,5 +574,23 @@
   "tr": "Bu Markdown’ı biçimlendiremedim. Söz dizimini ve Telegram’ın biçimlendirilmiş mesaj sınırlarını kontrol edip tekrar dene.",
   "uk": "Не вдалося оформити цей Markdown. Перевір синтаксис і обмеження Telegram для форматованих повідомлень, потім спробуй ще раз.",
   "zh": "这段 Markdown 排版失败了。请检查语法和 Telegram 的富文本消息限制，然后重试。"
+ },
+ "msg.rich_message": {
+  "ar": "أرسل Telegram هذا كرسالة منسّقة مسبقًا وليس كنص، لذلك لا أرى Markdown الأصلي. أرسله كملف ‎.md أو الصق النص بدون تنسيق.",
+  "be": "Telegram даслаў гэта ўжо аформленым паведамленнем, а не тэкстам, таму зыходнага Markdown я не бачу. Дашлі яго файлам .md або ўстаў тэкст без фарматавання.",
+  "ca": "Telegram ho ha enviat com un missatge ja formatat, no com a text, així que no en veig el Markdown original. Envia-ho com a fitxer .md o enganxa el text sense format.",
+  "cs": "Telegram to poslal jako už naformátovanou zprávu, ne jako text, takže původní Markdown nevidím. Pošli ho jako soubor .md nebo vlož text bez formátování.",
+  "de": "Telegram hat das als bereits formatierte Nachricht gesendet, nicht als Text, daher sehe ich das ursprüngliche Markdown nicht. Schick es als .md-Datei oder füge den Text ohne Formatierung ein.",
+  "en": "Telegram sent this as an already formatted message, not as text, so I can't see the original Markdown. Send it as a .md file or paste the text without formatting.",
+  "es": "Telegram lo envió como un mensaje ya formateado, no como texto, así que no veo el Markdown original. Envíalo como archivo .md o pega el texto sin formato.",
+  "fr": "Telegram l’a envoyé comme un message déjà mis en forme, pas comme du texte, donc je ne vois pas le Markdown d’origine. Envoie-le en fichier .md ou colle le texte sans mise en forme.",
+  "it": "Telegram l’ha inviato come messaggio già formattato, non come testo, quindi non vedo il Markdown originale. Invialo come file .md o incolla il testo senza formattazione.",
+  "ja": "Telegram がこれをテキストではなく書式付きメッセージとして送ったため、元の Markdown が見えません。.md ファイルで送るか、書式なしでテキストを貼り付けてください。",
+  "pl": "Telegram wysłał to jako już sformatowaną wiadomość, a nie jako tekst, więc nie widzę oryginalnego Markdownu. Wyślij go jako plik .md albo wklej tekst bez formatowania.",
+  "ru": "Telegram прислал это уже оформленным сообщением, а не текстом, поэтому исходный Markdown мне не виден. Пришли его файлом .md или вставь текст без форматирования.",
+  "sv": "Telegram skickade det här som ett redan formaterat meddelande, inte som text, så jag ser inte den ursprungliga Markdownen. Skicka den som en .md-fil eller klistra in texten utan formatering.",
+  "tr": "Telegram bunu metin olarak değil, önceden biçimlendirilmiş bir mesaj olarak gönderdi, bu yüzden orijinal Markdown'ı göremiyorum. .md dosyası olarak gönder ya da metni biçimlendirmeden yapıştır.",
+  "uk": "Telegram надіслав це вже оформленим повідомленням, а не текстом, тому вихідного Markdown я не бачу. Надішли його файлом .md або встав текст без форматування.",
+  "zh": "Telegram 把它作为已排版的消息而不是文本发送，所以我看不到原始 Markdown。请以 .md 文件发送，或粘贴无格式文本。"
  }
 }

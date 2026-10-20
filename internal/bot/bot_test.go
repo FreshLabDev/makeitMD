@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -448,5 +450,58 @@ func TestReplayedRichPasteGetsNoSecondAdvice(t *testing.T) {
 	}
 	if len(client.texts) != 0 || len(client.rich) != 0 {
 		t.Fatalf("replay sent again: %+v", client)
+	}
+}
+
+const richMessageUpdate = `{"update_id":5,"message":{"message_id":3,"date":100,"chat":{"id":7,"type":"%s"},"from":{"id":7,"is_bot":false,"first_name":"A"},` +
+	`"rich_message":{"blocks":[{"type":"section_heading","text":"Ипотека"},{"type":"paragraph","text":[{"type":"bold","text":"ставка"}," и платёж"]},{"type":"paragraph","text":"ещё"}]}}}`
+
+// A client can send pasted rich text as a rich message, with no text. The bot
+// says why it cannot render that instead of ignoring it, and stores nothing.
+func TestRichMessageGetsAnExplanation(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "private"))
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 1 || client.texts[0] != i18n.T("en", "msg.rich_message") {
+		t.Fatalf("texts=%q", client.texts)
+	}
+	if len(client.rich) != 0 || store.created != 0 || store.touched != 1 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestRichMessageInGroupIsIgnored(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "supergroup"))
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || len(client.messages) != 0 || store.touched != 0 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestMessageWithoutTextOrRichMessageIsIgnored(t *testing.T) {
+	client := &fakeTelegram{}
+	store := &fakeStore{}
+	update := mustUpdate(t, `{"update_id":5,"message":{"message_id":3,"date":100,"chat":{"id":7,"type":"private"},"from":{"id":7,"is_bot":false,"first_name":"A"},"sticker":{"file_id":"x"}}}`)
+	if err := newTestBot(client, store).handle(context.Background(), testPaste(update)); err != nil {
+		t.Fatal(err)
+	}
+	if len(client.texts) != 0 || store.touched != 0 {
+		t.Fatalf("client=%+v store=%+v", client, store)
+	}
+}
+
+func TestRichMessageTypesCountsTypesOnly(t *testing.T) {
+	update := mustUpdate(t, fmt.Sprintf(richMessageUpdate, "private"))
+	got := richMessageTypes(update.Message)
+	want := map[string]int{"section_heading": 1, "paragraph": 2, "bold": 1}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }

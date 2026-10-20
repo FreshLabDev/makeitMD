@@ -60,6 +60,9 @@ Keep makeitMD minimal, private by default, and production-minded.
   decoded source. Ignore captions and never join documents into pasted text.
   Download through `tg` with a 15-second budget into a private temporary
   directory, then remove it. Never execute or extract uploaded documents.
+- A private message with no text but a `rich_message` (read from `Message.Raw`;
+  `tg` does not model it) gets `msg.rich_message` and nothing else: no
+  conversion row. Log block and rich-text type counts only, never content.
 - In a group the bot renders nothing. `/start` is registered there with
   `is_ephemeral`, so the command and its answer are visible only to the person
   who typed it; without an ephemeral id to answer, stay silent rather than post

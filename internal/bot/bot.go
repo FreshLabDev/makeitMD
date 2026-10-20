@@ -230,7 +230,11 @@ func (b *Bot) LastPoll() time.Time {
 
 func (b *Bot) handle(ctx context.Context, p paste) error {
 	message := p.message
-	if message == nil || message.From == nil || message.From.IsBot || (message.Text == "" && message.Document == nil) {
+	if message == nil || message.From == nil || message.From.IsBot {
+		return nil
+	}
+	richTypes := richMessageTypes(message)
+	if message.Text == "" && message.Document == nil && (richTypes == nil || message.Chat.Type != "private") {
 		return nil
 	}
 	if message.Chat.Type != "private" {
@@ -241,6 +245,9 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	}
 	if message.Document != nil {
 		return b.handleDocument(ctx, p)
+	}
+	if message.Text == "" {
+		return b.handleRichMessage(ctx, message, richTypes)
 	}
 	if isStartCommand(message.Text) {
 		return b.sendScreen(ctx, message.Chat.ID, rootScreen(b.resolveLang(ctx, *message.From)))
@@ -376,6 +383,54 @@ func (b *Bot) sendPasteHint(ctx context.Context, message *tg.Message, wanted boo
 	if err := b.sendText(ctx, message.Chat.ID, i18n.T(b.resolveLang(ctx, *message.From), "msg.paste_lost_structure")); err != nil {
 		b.log.Warn("paste hint failed", "error", err)
 	}
+}
+
+// handleRichMessage answers a message a client sent already formatted. Since
+// Bot API 10.1 a client may turn pasted rich text into a rich message: blocks,
+// with no text field and no Markdown source to render. Nothing is converted or
+// stored. The log keeps only how many blocks of each type arrived, never their
+// content, to show what clients actually send.
+func (b *Bot) handleRichMessage(ctx context.Context, message *tg.Message, types map[string]int) error {
+	b.log.Info("rich message received", "types", types)
+	return b.sendText(ctx, message.Chat.ID, i18n.T(b.resolveLang(ctx, *message.From), "msg.rich_message"))
+}
+
+// richMessageTypes counts the block and rich-text types of message's
+// rich_message, read from the raw update because tg does not model it. It
+// returns nil when the message has none.
+func richMessageTypes(message *tg.Message) map[string]int {
+	if len(message.Raw) == 0 {
+		return nil
+	}
+	var raw struct {
+		RichMessage json.RawMessage `json:"rich_message"`
+	}
+	if json.Unmarshal(message.Raw, &raw) != nil || len(raw.RichMessage) == 0 || string(raw.RichMessage) == "null" {
+		return nil
+	}
+	var tree any
+	if json.Unmarshal(raw.RichMessage, &tree) != nil {
+		return nil
+	}
+	types := map[string]int{}
+	var walk func(any)
+	walk = func(node any) {
+		switch node := node.(type) {
+		case map[string]any:
+			if kind, ok := node["type"].(string); ok {
+				types[kind]++
+			}
+			for _, child := range node {
+				walk(child)
+			}
+		case []any:
+			for _, child := range node {
+				walk(child)
+			}
+		}
+	}
+	walk(tree)
+	return types
 }
 
 // handleGroupStart answers /start where makeitMD cannot work. The reply is
