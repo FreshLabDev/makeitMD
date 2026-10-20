@@ -13,6 +13,21 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4-alpha.3 - 2026-10-20
+
+Found by pasting a ChatGPT answer into alpha.2 with ⌘⇧V. Still on the
+production bot.
+
+### Fixed
+
+- **ChatGPT formulas pasted as plain text render.** ChatGPT's copy button
+  escapes its Markdown once more, so the plain text holds `\\[ 1\\,000 \\]`
+  and `\\(PV\\)`. alpha.2 read the doubled backslash as an escaped backslash
+  and left every formula of the test answer as text. Doubled delimiters are
+  now formulas too, with Markdown escapes such as `\_` and `\&` removed from
+  the content. They are converted only when at least one holds LaTeX syntax,
+  so a lone `C:\\(x86\\)` stays text.
+
 ## v0.1.4-alpha.2 - 2026-10-20
 
 Found by pasting answers from three chatbots into alpha.1: ChatGPT's formulas
