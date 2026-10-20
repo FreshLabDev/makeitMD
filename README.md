@@ -140,7 +140,10 @@ Markdown reads `\(` as an escaped parenthesis, so Telegram would show
 `(x^2)` instead of a formula. Outside code they become `$...$` and `$$...$$`.
 An escaped backslash (`\\(`) is left alone, and `\[...\]` is converted only
 when it stands on its own lines or contains LaTeX syntax, so `\[1\]` stays a
-bracketed reference.
+bracketed reference. ChatGPT’s copy button escapes the Markdown once more
+(`\\[ 1\\,000 \\]`); these doubled delimiters are formulas too, with the
+content unescaped, but only when one of them contains LaTeX syntax, so a path
+like `C:\\(x86\\)` stays text.
 Putting `$...$` inside ordinary inline code or a non-`math` code block makes it
 code, not a formula. Receiving clients must support rich messages.
 

@@ -51,7 +51,9 @@ Keep makeitMD minimal, private by default, and production-minded.
   client has consumed formatting into `Message.entities`, deterministically
   restore only those entity ranges before calling Bot API 10.1 `sendRichMessage`.
 - The one source rewrite: `\(...\)` and `\[...\]` become `$...$` and `$$...$$`
-  outside code (`richmarkdown.ConvertLaTeXDelimiters`). It is a delimiter
+  outside code (`richmarkdown.ConvertLaTeXDelimiters`), and so do the doubled
+  `\\(...\\)` and `\\[...\\]` of ChatGPT's copy button, with Markdown escapes
+  removed from the content. It is a delimiter
   scanner, not a Markdown parser; keep it that narrow.
 - Text documents use the same conversion path. Accept UTF-8 by content, up to
   128 KiB; strip only an initial BOM for rendering and retain the original

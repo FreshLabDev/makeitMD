@@ -28,6 +28,13 @@ func TestConvertLaTeXDelimiters(t *testing.T) {
 		{"other tags are text", `<b>\(x\)</b>`, `<b>$x$</b>`},
 		{"dollars untouched", `$x$ и $$y$$`, `$x$ и $$y$$`},
 		{"nothing to do", "# plain\n\ntext", "# plain\n\ntext"},
+		// ChatGPT's copy button escapes its Markdown once more.
+		{"doubled display", `\\[ I_1=1\\,000\\,000\cdot\frac{0{,}05}{12} \\]`, `$$I_1=1\,000\,000\cdot\frac{0{,}05}{12}$$`},
+		{"doubled unescapes underscores", `\\[ P=\sum\_{k=1}^{n}\frac{A}{(1+r)^k} \\]`, `$$P=\sum_{k=1}^{n}\frac{A}{(1+r)^k}$$`},
+		{"doubled row break", `\\[ \begin{cases} A_k=I_k+C_k\\\ I_k=rB\_{k-1} \end{cases} \\]`, `$$\begin{cases} A_k=I_k+C_k\\ I_k=rB_{k-1} \end{cases}$$`},
+		{"doubled inline beside a formula", "\\\\[ FV=PV(1+r)^n \\\\]\n\n- \\\\(PV\\\\) это капитал", "$$FV=PV(1+r)^n$$\n\n- $PV$ это капитал"},
+		{"doubled code is literal", "`\\\\(x^2\\\\)` и \\\\(y^2\\\\)", "`\\\\(x^2\\\\)` и $y^2$"},
+		{"doubled without latex stays", `C:\\(x86\\) и \\[1\\]`, `C:\\(x86\\) и \\[1\\]`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := ConvertLaTeXDelimiters(tc.source); got != tc.want {

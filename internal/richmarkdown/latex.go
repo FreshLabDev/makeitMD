@@ -15,10 +15,27 @@ import "strings"
 // is itself escaped ("\\(") is not a delimiter. And "\[...\]" is converted only
 // when it reads as a formula -- on lines of its own, or containing LaTeX
 // syntax -- so an escaped reference such as "\[1\]" keeps its brackets.
+//
+// ChatGPT's copy button escapes its Markdown once more: "\\[ 1\\,000 \\]".
+// Rendered as Markdown that is the LaTeX again, so a doubled delimiter is a
+// formula too, its content unescaped. Doubled delimiters are read that way
+// only when one of them holds LaTeX syntax, so a lone path such as
+// "C:\\(x86\\)" stays text.
 func ConvertLaTeXDelimiters(source string) string {
 	if !strings.Contains(source, `\(`) && !strings.Contains(source, `\[`) {
 		return source
 	}
+	if out, sawLaTeX := convertLaTeXDelimiters(source, true); sawLaTeX {
+		return out
+	}
+	out, _ := convertLaTeXDelimiters(source, false)
+	return out
+}
+
+// convertLaTeXDelimiters converts doubled delimiters too when doubled is set,
+// and reports whether any doubled formula held LaTeX syntax.
+func convertLaTeXDelimiters(source string, doubled bool) (string, bool) {
+	sawLaTeX := false
 	var out strings.Builder
 	out.Grow(len(source))
 	lines := strings.SplitAfter(source, "\n")
@@ -26,7 +43,9 @@ func ConvertLaTeXDelimiters(source string) string {
 	var prose []string
 	flush := func() {
 		if len(prose) > 0 {
-			out.WriteString(convertProse(strings.Join(prose, "")))
+			converted, saw := convertProse(strings.Join(prose, ""), doubled)
+			out.WriteString(converted)
+			sawLaTeX = sawLaTeX || saw
 			prose = prose[:0]
 		}
 	}
@@ -47,7 +66,7 @@ func ConvertLaTeXDelimiters(source string) string {
 		prose = append(prose, line)
 	}
 	flush()
-	return out.String()
+	return out.String(), sawLaTeX
 }
 
 // openingFence returns the backtick or tilde run that opens a fenced code
@@ -81,7 +100,8 @@ func closesFence(line, fence string) bool {
 }
 
 // convertProse rewrites delimiters in text that holds no fenced code block.
-func convertProse(text string) string {
+func convertProse(text string, doubled bool) (string, bool) {
+	sawLaTeX := false
 	var out strings.Builder
 	out.Grow(len(text))
 	for i := 0; i < len(text); {
@@ -94,8 +114,17 @@ func convertProse(text string) string {
 			end := literalElementEnd(text, i)
 			out.WriteString(text[i:end])
 			i = end
+		case doubled && strings.HasPrefix(text[i:], `\\`) && i+2 < len(text) && (text[i+2] == '(' || text[i+2] == '['):
+			if replacement, end, latex, ok := delimitedMath(text, i, true); ok {
+				out.WriteString(replacement)
+				sawLaTeX = sawLaTeX || latex
+				i = end
+				continue
+			}
+			out.WriteString(text[i : i+2])
+			i += 2
 		case text[i] == '\\' && i+1 < len(text) && (text[i+1] == '(' || text[i+1] == '['):
-			if replacement, end, ok := delimitedMath(text, i); ok {
+			if replacement, end, _, ok := delimitedMath(text, i, false); ok {
 				out.WriteString(replacement)
 				i = end
 				continue
@@ -112,7 +141,7 @@ func convertProse(text string) string {
 			i++
 		}
 	}
-	return out.String()
+	return out.String(), sawLaTeX
 }
 
 // codeSpanEnd returns the index just past the code span opened by the
@@ -162,44 +191,75 @@ func literalElementEnd(text string, start int) int {
 }
 
 // delimitedMath converts the formula whose opening delimiter is at start.
-func delimitedMath(text string, start int) (string, int, bool) {
-	display := text[start+1] == '['
+// A doubled delimiter has a second backslash, and Markdown-escaped content.
+// latex reports whether the content holds LaTeX syntax.
+func delimitedMath(text string, start int, doubled bool) (replacement string, end int, latex, ok bool) {
+	open := 1
+	if doubled {
+		open = 2
+	}
+	display := text[start+open] == '['
 	closing := `\)`
 	if display {
 		closing = `\]`
 	}
-	contentStart := start + 2
-	end := -1
+	if doubled {
+		closing = `\` + closing
+	}
+	contentStart := start + open + 1
+	contentEnd := -1
 	for i := contentStart; i+1 < len(text); i++ {
 		if text[i] == '\n' && i+1 < len(text) && strings.TrimSpace(lineAt(text, i+1)) == "" {
-			return "", 0, false // A formula does not cross a blank line.
+			return "", 0, false, false // A formula does not cross a blank line.
 		}
 		if text[i] == '\\' {
-			if text[i:i+2] == closing {
-				end = i
+			if strings.HasPrefix(text[i:], closing) {
+				contentEnd = i
 				break
 			}
 			i++ // Skip the escaped byte: "\\)" is a LaTeX newline then ")".
 		}
 	}
-	if end < 0 {
-		return "", 0, false
+	if contentEnd < 0 {
+		return "", 0, false, false
 	}
-	content := strings.TrimSpace(text[contentStart:end])
+	content := strings.TrimSpace(text[contentStart:contentEnd])
+	if doubled {
+		content = unescapeMarkdown(content)
+	}
 	if content == "" || strings.Contains(content, "$") {
-		return "", 0, false
+		return "", 0, false, false
 	}
-	after := end + 2
-	if display && !standsAlone(text, start, after) && !looksLikeLaTeX(content) {
-		return "", 0, false
+	end = contentEnd + len(closing)
+	latex = looksLikeLaTeX(content)
+	if display && !standsAlone(text, start, end) && !latex {
+		return "", 0, false, false
 	}
 	// Newlines are whitespace in LaTeX; one line keeps the documented
 	// single-line $$...$$ form.
 	content = strings.Join(strings.Fields(content), " ")
 	if display {
-		return "$$" + content + "$$", after, true
+		return "$$" + content + "$$", end, latex, true
 	}
-	return "$" + content + "$", after, true
+	return "$" + content + "$", end, latex, true
+}
+
+// unescapeMarkdown drops the backslash of each Markdown escape: a backslash
+// before ASCII punctuation.
+func unescapeMarkdown(text string) string {
+	var out strings.Builder
+	out.Grow(len(text))
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\\' && i+1 < len(text) && isASCIIPunct(text[i+1]) {
+			i++
+		}
+		out.WriteByte(text[i])
+	}
+	return out.String()
+}
+
+func isASCIIPunct(c byte) bool {
+	return c >= '!' && c <= '/' || c >= ':' && c <= '@' || c >= '[' && c <= '`' || c >= '{' && c <= '~'
 }
 
 // lineAt returns the line starting at index i, without its newline.
