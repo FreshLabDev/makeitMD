@@ -505,3 +505,50 @@ func TestRichMessageTypesCountsTypesOnly(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+func splitPart(updateID, messageID, date int64, text string, entities ...tg.MessageEntity) tg.Update {
+	update := testUpdateWithIDs(updateID, messageID, date, text)
+	update.Message.Entities = entities
+	return update
+}
+
+// A phone sent a split paste with the tail under the smaller message id.
+func TestSplitPasteWithTailFirstIsReordered(t *testing.T) {
+	head := strings.Repeat("начало ", 600) // 4200 UTF-16 units
+	tail := "конец"
+	updates := []tg.Update{
+		splitPart(1, 194, 100, tail, tg.MessageEntity{Type: "bold", Offset: 0, Length: 5}),
+		splitPart(2, 195, 100, head, tg.MessageEntity{Type: "italic", Offset: 0, Length: 6}),
+	}
+	grouped, last := groupTextUpdates(updates, 0)
+	if last != 1 || grouped.updateID != 1 || grouped.message.MessageID != 194 {
+		t.Fatalf("last=%d update=%d message=%d", last, grouped.updateID, grouped.message.MessageID)
+	}
+	if grouped.message.Text != head+"\n"+tail {
+		t.Fatalf("text starts %q", grouped.message.Text[:20])
+	}
+	want := []tg.MessageEntity{{Type: "italic", Offset: 0, Length: 6}, {Type: "bold", Offset: utf16Length(head) + 1, Length: 5}}
+	if !reflect.DeepEqual(grouped.message.Entities, want) {
+		t.Fatalf("entities=%+v", grouped.message.Entities)
+	}
+}
+
+func TestSplitPasteOrderIsKept(t *testing.T) {
+	full := strings.Repeat("слово ", 700)
+	for name, tc := range map[string]struct {
+		parts []tg.Update
+		want  string
+	}{
+		"already in order":          {[]tg.Update{splitPart(1, 1, 100, full), splitPart(2, 2, 100, "хвост")}, full + "\nхвост"},
+		"note typed before a paste": {[]tg.Update{splitPart(1, 1, 100, "переведи"), splitPart(2, 2, 101, full)}, "переведи\n" + full},
+		"two short parts":           {[]tg.Update{splitPart(1, 1, 100, "a"), splitPart(2, 2, 100, "b"), splitPart(3, 3, 100, full)}, "a\nb\n" + full},
+		"all full":                  {[]tg.Update{splitPart(1, 1, 100, full+"1"), splitPart(2, 2, 100, full+"2")}, full + "1\n" + full + "2"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			grouped, _ := groupTextUpdates(tc.parts, 0)
+			if grouped.message.Text != tc.want {
+				t.Fatalf("got %d chars starting %q", len(grouped.message.Text), grouped.message.Text[:12])
+			}
+		})
+	}
+}

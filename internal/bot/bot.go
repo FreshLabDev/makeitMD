@@ -256,6 +256,9 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return nil
 	}
 	renderedMarkdown := richmarkdown.RestoreEntities(message.Text, message.Entities)
+	// Only pastes: a phone app copies display formulas without delimiters. A
+	// file is what its author wrote.
+	renderedMarkdown = richmarkdown.WrapBareFormulas(renderedMarkdown)
 	return b.convert(ctx, p, renderedMarkdown, lostPasteStructure(message))
 }
 
@@ -609,29 +612,69 @@ func groupTextUpdates(updates []tg.Update, start int) (paste, int) {
 	if !batchableMessage(first.Message) {
 		return paste{updateID: first.UpdateID, message: first.Message, raws: rawsOf(first.Message)}, start
 	}
-	combined := *first.Message
-	combined.Entities = append([]tg.MessageEntity(nil), first.Message.Entities...)
+	parts := []*tg.Message{first.Message}
 	raws := rawsOf(first.Message)
 	last := start
 	for next := start + 1; next < len(updates); next++ {
 		candidate := updates[next].Message
-		previous := updates[last].Message
-		if !samePaste(previous, candidate) {
+		if !samePaste(updates[last].Message, candidate) {
 			break
 		}
-		offset := utf16Length(combined.Text) + 1
-		combined.Text += "\n" + candidate.Text
+		parts = append(parts, candidate)
 		raws = append(raws, rawsOf(candidate)...)
-		for _, entity := range candidate.Entities {
+		last = next
+	}
+	combined := *first.Message
+	combined.Text = ""
+	combined.Entities = nil
+	for i, part := range pasteOrder(parts) {
+		offset := 0
+		if i > 0 {
+			offset = utf16Length(combined.Text) + 1
+			combined.Text += "\n"
+		}
+		combined.Text += part.Text
+		for _, entity := range part.Entities {
 			entity.Offset += offset
 			combined.Entities = append(combined.Entities, entity)
 		}
-		last = next
 	}
 	// The stitched message is synthetic: it has no original of its own, so its
-	// Raw would describe only the first part.
+	// Raw would describe only the first part. raws keep Telegram's order.
 	combined.Raw = nil
 	return paste{updateID: first.UpdateID, message: &combined, raws: raws}, last
+}
+
+// A client splits a long paste into messages of up to 4096 UTF-16 units, so
+// every part but the last is nearly full. Observed parts were 3721 or longer,
+// tails 314 to 3054.
+const fullPartLength = 3000
+
+// pasteOrder returns the parts in reading order. A phone sends the parts of a
+// split paste at once, and the tail can be given the smaller message id. When
+// all parts carry the same second and exactly one is short but not last, it is
+// the tail and goes to the end. Anything else keeps message id order: a short
+// note typed before a long paste takes longer than a second.
+func pasteOrder(parts []*tg.Message) []*tg.Message {
+	short := -1
+	for i, part := range parts {
+		if part.Date != parts[0].Date {
+			return parts
+		}
+		if utf16Length(part.Text) < fullPartLength {
+			if short >= 0 {
+				return parts
+			}
+			short = i
+		}
+	}
+	if short < 0 || short == len(parts)-1 {
+		return parts
+	}
+	ordered := make([]*tg.Message, 0, len(parts))
+	ordered = append(ordered, parts[:short]...)
+	ordered = append(ordered, parts[short+1:]...)
+	return append(ordered, parts[short])
 }
 
 // rawsOf returns the message exactly as Telegram sent it, or nothing when the

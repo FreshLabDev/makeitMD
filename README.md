@@ -140,7 +140,7 @@ $$E=mc^2$$
 The formula source goes to Telegram unchanged. Telegram’s documented syntax is
 not a promise of full KaTeX or a complete TeX document engine.
 
-`\(...\)` and `\[...\]`, the delimiters ChatGPT writes, are the one rewrite:
+`\(...\)` and `\[...\]`, the delimiters ChatGPT writes, are the first rewrite:
 Markdown reads `\(` as an escaped parenthesis, so Telegram would show
 `(x^2)` instead of a formula. Outside code they become `$...$` and `$$...$$`.
 An escaped backslash (`\\(`) is left alone, and `\[...\]` is converted only
@@ -149,6 +149,16 @@ bracketed reference. ChatGPT’s copy button escapes the Markdown once more
 (`\\[ 1\\,000 \\]`); these doubled delimiters are formulas too, with the
 content unescaped, but only when one of them contains LaTeX syntax, so a path
 like `C:\\(x86\\)` stays text.
+
+The second rewrite applies to pastes only, where the source has no `$`, `\(` or
+`\[` at all. Chatbot apps on phones copy a display formula as bare LaTeX: a
+line `A=P\cdot\frac{r}{1-(1+r)^{-n}}`, or a code block with no language.
+Such a line or block becomes `$$...$$` when it reads as a formula: a LaTeX
+command next to math, or a sub/superscript with a relation, and no word of
+three or more letters once commands and braced arguments are removed. A
+`\begin{...}` split over lines and consecutive formula lines become one
+formula. Prose with an inline `\lambda`, code, links and paths stay text.
+Formulas a phone app deleted while copying cannot be recovered.
 Putting `$...$` inside ordinary inline code or a non-`math` code block makes it
 code, not a formula. Receiving clients must support rich messages.
 
