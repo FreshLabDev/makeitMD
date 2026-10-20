@@ -33,7 +33,6 @@ type Store interface {
 	EffectiveLanguage(context.Context, int64) (string, bool, error)
 	SetLanguage(context.Context, int64, string) error
 	ClearLanguage(context.Context, int64) error
-	ConversionStatus(context.Context, int64) (db.ConversionStatus, error)
 	CreateConversion(context.Context, int64, tg.Message, []json.RawMessage, string) (int64, db.ConversionStatus, error)
 	MarkSent(context.Context, int64, string, db.Result, []db.DeliveryAttempt) error
 	MarkFailed(context.Context, int64, string, string, db.Result, []db.DeliveryAttempt) error
@@ -44,8 +43,6 @@ type Store interface {
 type Telegram interface {
 	SetMyCommandsForScope(context.Context, []tg.BotCommand, *tg.BotCommandScope) error
 	GetUpdates(context.Context, int64, int) ([]tg.Update, error)
-	GetFile(context.Context, string) (tg.File, error)
-	DownloadToFile(context.Context, string, string, int64) error
 	SendMessage(context.Context, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
 	SendPlainText(context.Context, int64, string) (tg.Message, error)
 	SendEphemeralMessage(context.Context, int64, int64, int64, string, *tg.InlineKeyboardMarkup) (tg.Message, error)
@@ -227,7 +224,7 @@ func (b *Bot) LastPoll() time.Time {
 
 func (b *Bot) handle(ctx context.Context, p paste) error {
 	message := p.message
-	if message == nil || message.From == nil || message.From.IsBot || (message.Text == "" && message.Document == nil) {
+	if message == nil || message.From == nil || message.From.IsBot || message.Text == "" {
 		return nil
 	}
 	if message.Chat.Type != "private" {
@@ -236,9 +233,6 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 	if err := b.store.Touch(ctx, *message.From); err != nil {
 		return err
 	}
-	if message.Document != nil {
-		return b.handleDocument(ctx, p)
-	}
 	if isStartCommand(message.Text) {
 		return b.sendScreen(ctx, message.Chat.ID, rootScreen(b.resolveLang(ctx, *message.From)))
 	}
@@ -246,13 +240,6 @@ func (b *Bot) handle(ctx context.Context, p paste) error {
 		return nil
 	}
 	renderedMarkdown := richmarkdown.RestoreEntities(message.Text, message.Entities)
-	return b.convert(ctx, p, renderedMarkdown)
-}
-
-// convert is shared by pasted text and downloaded text files. Only pastes
-// restore client entities; a document's caption never formats its contents.
-func (b *Bot) convert(ctx context.Context, p paste, renderedMarkdown string) error {
-	message := p.message
 	conversionID, status, err := b.store.CreateConversion(ctx, p.updateID, *message, p.raws, renderedMarkdown)
 	if err != nil {
 		return err

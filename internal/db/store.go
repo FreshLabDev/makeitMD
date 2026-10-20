@@ -94,17 +94,6 @@ func (s *Store) EffectiveLanguage(ctx context.Context, userID int64) (string, bo
 	return *lang, true, nil
 }
 
-// ConversionStatus lets a replayed document skip getFile and downloading: a
-// delivered conversion remains delivered even if Telegram's file expires.
-func (s *Store) ConversionStatus(ctx context.Context, updateID int64) (ConversionStatus, error) {
-	var status ConversionStatus
-	err := s.pool.QueryRow(ctx, `SELECT status FROM conversions WHERE telegram_update_id=$1`, updateID).Scan(&status)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", nil
-	}
-	return status, err
-}
-
 func (s *Store) CreateConversion(ctx context.Context, updateID int64, message tg.Message, raws []json.RawMessage, renderedMarkdown string) (int64, ConversionStatus, error) {
 	var id int64
 	var status ConversionStatus

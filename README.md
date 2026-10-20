@@ -28,27 +28,24 @@ chat and receive Telegram's native rendering immediately.
 
 | Principle | makeitMD approach |
 |:--|:--|
-| Exact input | Preserves source; restores formatting consumed by Telegram clients |
+| Exact input | Passes the submitted string unchanged as `rich_message.markdown` |
 | Native rendering | Uses Telegram `sendRichMessage`, not a custom parser |
 | Minimal interaction | `/start` only, one panel: two tabs and the language, no settings |
 | Private operations | Statistics and source audit stay operator-only |
-| Shared integration | Uses the family’s small `github.com/FreshLabDev/tg` HTTP client |
+| Direct integration | Calls the Bot API over HTTP without a Telegram library |
 
-> **Result:** one text message or text file in, one native rich message out.
+> **Result:** one text in, one native rich message out.
 
 ## Status
 
 | Channel | Version | Meaning |
 |:--|:--|:--|
-| Stable tag | `v0.1.2` | Latest stable version recorded in this repository |
-| Development | `dev` | File input and clearer formula help, not released |
-
-The running production version must be checked through `/healthz` or About;
-this table is not a live deployment check.
+| Stable | `v0.1.0` | First public release |
+| Production | `v0.1.0` | Runs as `makeitmd-bot` with healthy DB and Telegram polling |
 
 ## Quick Start
 
-You need Go 1.26.10+, Docker, a Telegram token from
+You need Go 1.26.5+, Docker, a Telegram token from
 [BotFather](https://t.me/BotFather), and access to the Asterfield shared
 `core-postgres` database.
 
@@ -66,26 +63,12 @@ exists.
 
 1. Open [@makeitMD_bot](https://t.me/makeitMD_bot).
 2. Send `/start`.
-3. Send Markdown source text, or attach a UTF-8 text file.
+3. Send Markdown source text.
 4. Receive the native Telegram Rich Markdown message.
 
 The greeting is intentionally short:
 
-> Send me Markdown as a message or a text file. I’ll render it.
-
-Files such as `.md`, `.txt`, `.markdown`, `.mdown`, `.csv`, `.json`, `.tex`,
-and extensionless text are accepted by content, regardless of the supplied MIME
-type. The limit is 128 KiB (131,072 bytes), including an optional UTF-8 BOM.
-The file contents are rendered as Rich Markdown, not converted from another
-document format. PDF, Word, archives, invalid UTF-8, and binary data are rejected.
-Captions are ignored. Each file is one conversion and is never joined to a
-nearby text message or another file.
-
-Downloads use the shared Telegram client, have a 15-second budget including
-`getFile`, and are removed from a private temporary directory after processing.
-Accepted source and original document metadata follow the existing conversion
-retention policy. Rejected or unsuccessfully downloaded files do not create a
-conversion row. A download failure asks the sender to resend the file.
+> Send me Markdown. I’ll render it.
 
 `/start` also opens the panel: **How it works**, **About** — the running
 version, the rendering the bot uses, the repository, the licence and the admin —
@@ -104,35 +87,7 @@ a link back to the private chat — is visible only to the person who sent it.
 
 Rich Markdown supports headings, nested styles, lists, task lists, tables,
 quotes, code blocks, details, links, formulas, and other structured content.
-Telegram currently limits one rich message to 32,768 UTF-8 characters of rendered
-text, including formula source and custom emoji alternative text. Source bytes
-and rendered characters are different limits. Telegram also limits block count,
-nesting, media and table width. Oversized documents are not truncated or split
-automatically, because splitting could break tables, code or formulas.
-
-### Formulas
-
-Telegram Rich Markdown supports inline `$x^2 + y^2$`, block `$$E=mc^2$$`, and
-fenced `math` blocks:
-
-````markdown
-Inline: $\frac{a}{b}$
-
-$$E=mc^2$$
-
-```math
-\int_0^1 x^2\,dx = \frac{1}{3}
-```
-````
-
-The formula source goes to Telegram unchanged. Telegram’s documented syntax is
-not a promise of full KaTeX or a complete TeX document engine. `\(...\)` and
-`\[...\]` are not documented rich-message delimiters; use the forms above.
-Putting `$...$` inside ordinary inline code or a non-`math` code block makes it
-code, not a formula. Receiving clients must support rich messages.
-
-See Telegram’s [Rich Markdown syntax and limits](https://core.telegram.org/bots/api#rich-message-formatting-options)
-and [file download contract](https://core.telegram.org/bots/api#getfile).
+Telegram currently limits one rich message to 32,768 UTF-8 characters.
 
 ## How It Works
 

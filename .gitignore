@@ -3,6 +3,3 @@
 /makeitmd
 *.log
 .DS_Store
-
-# Promo cards and posts made for a release; kept outside git
-/outputs/
