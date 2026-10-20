@@ -13,6 +13,19 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4-alpha.1 - 2026-10-20
+
+makeitMD renders Markdown sent as a text file, and is built with a Go release
+that closes ten advisories the running `v0.1.2` is exposed to.
+
+makeitMD has no test bot, so this alpha runs on the production bot. It becomes
+`v0.1.4` once formulas from `docs/examples/formulas.md` sent as a file render
+correctly on Telegram Desktop, Android and iOS, or is rolled back to `v0.1.2`.
+
+There is no `v0.1.3`. That tag was pushed by mistake on 20 October with work
+that had not been reviewed, nothing was published from it, and tags here
+cannot be deleted.
+
 ### Added
 
 - **Markdown can be sent as a file.** A UTF-8 text file of up to 128 KB gets
