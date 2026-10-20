@@ -13,6 +13,12 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.4-alpha.2 - 2026-10-20
+
+Found by pasting answers from three chatbots into alpha.1: ChatGPT's formulas
+did not render, and an ordinary paste lost tables and lists before the bot saw
+them. Still on the production bot.
+
 ### Added
 
 - **Formulas written as `\(...\)` and `\[...\]` render.** That is how
