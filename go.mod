@@ -2,7 +2,7 @@
 
 module github.com/asterfield-dev/makeitMD
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/asterfield-dev/tg v0.4.0-alpha.2
