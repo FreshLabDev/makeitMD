@@ -12,13 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/FreshLabDev/makeitMD/internal/bot"
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/config"
-	"github.com/FreshLabDev/makeitMD/internal/db"
-	"github.com/FreshLabDev/makeitMD/internal/health"
-	"github.com/FreshLabDev/makeitMD/internal/metrics"
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/makeitMD/internal/bot"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/config"
+	"github.com/asterfield-dev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/health"
+	"github.com/asterfield-dev/makeitMD/internal/metrics"
+	"github.com/asterfield-dev/tg"
 )
 
 var (

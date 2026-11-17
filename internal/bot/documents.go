@@ -13,10 +13,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/db"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
 )
 
 // This is a download budget, not Telegram's rendered-text limit. Markup and

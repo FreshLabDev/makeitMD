@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/db"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
 )
 
 func documentUpdate(t *testing.T) tg.Update {

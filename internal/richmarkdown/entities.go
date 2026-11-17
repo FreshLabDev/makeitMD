@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 )
 
 type entityMarker struct {

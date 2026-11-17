@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/db"
 )
 
 type Store interface {

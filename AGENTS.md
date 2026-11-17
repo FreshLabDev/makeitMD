@@ -81,7 +81,7 @@ Keep makeitMD minimal, private by default, and production-minded.
 
 ## Data And Security
 
-- Telegram goes through `github.com/FreshLabDev/tg`, the client shared by the
+- Telegram goes through `github.com/asterfield-dev/tg`, the client shared by the
   bot family. makeitMD keeps no private HTTP client: transport, retries, token
   redaction and rich messages live there. Raw Telegram payloads that the
   conversion record keeps come from `Message.Raw` and `APIError.Response`.

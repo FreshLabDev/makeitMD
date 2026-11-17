@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
 )
 
 func TestStartOpensThePanel(t *testing.T) {
@@ -86,7 +86,7 @@ func TestAboutCardCarriesTheRunningBuild(t *testing.T) {
 		"<b>makeitMD</b> · <i>v9.9.9</i>",
 		i18n.T("en", "about.tagline"),
 		"Rendering · Telegram Bot API " + tg.BotAPI,
-		`Source · <a href="https://github.com/FreshLabDev/makeitMD">FreshLabDev/makeitMD</a> · Apache-2.0`,
+		`Source · <a href="https://github.com/asterfield-dev/makeitMD">asterfield-dev/makeitMD</a> · Apache-2.0`,
 		`Admin · <a href="https://t.me/amtiyo">@amtiyo</a>`,
 	} {
 		if !strings.Contains(card, want) {
@@ -122,7 +122,7 @@ func TestBackAndStaleDataReturnToTheRootPanel(t *testing.T) {
 func TestPanelIgnoresACallbackWithoutItsMessage(t *testing.T) {
 	client := &fakeTelegram{}
 	query := testCallback(panelAbout)
-	query.Message = tg.Message{}
+	query.Message = nil
 	if err := newTestBot(client, &fakeStore{}).handleCallback(context.Background(), query); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func groupMessage(text string, ephemeralID int64) *tg.Message {
 func testCallback(data string) *tg.CallbackQuery {
 	return &tg.CallbackQuery{
 		ID: "cb1", From: tg.User{ID: 7}, Data: data,
-		Message: tg.Message{MessageID: 42, Chat: tg.Chat{ID: 7, Type: "private"}},
+		Message: &tg.Message{MessageID: 42, Chat: tg.Chat{ID: 7, Type: "private"}},
 	}
 }
 

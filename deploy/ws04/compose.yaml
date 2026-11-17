@@ -7,7 +7,7 @@
 # on the host can say which commit it was. MAKEITMD_IMAGE must therefore name
 # an immutable GHCR reference, digest for preference:
 #
-#   MAKEITMD_IMAGE=ghcr.io/freshlabdev/makeitmd@sha256:<digest>
+#   MAKEITMD_IMAGE=ghcr.io/asterfield-dev/makeitmd@sha256:<digest>
 #
 # A tag is accepted but a digest is what makes a rollback exact.
 name: makeitmd

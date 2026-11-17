@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/build"
 )
 
 // Exercise the pinned shared client's real getFile/download/sendRichMessage

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/db"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/tg"
 )
 
 type fakeStore struct {

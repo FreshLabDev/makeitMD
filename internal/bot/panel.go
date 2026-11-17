@@ -5,10 +5,10 @@ import (
 	"html"
 	"strings"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
 )
 
 // The panel is three screens wide and one screen deep. makeitMD still has
@@ -42,8 +42,8 @@ const (
 // Japanese of "@amtiyo" has been asked the wrong question.
 const (
 	productName = "makeitMD"
-	repoURL     = "https://github.com/FreshLabDev/makeitMD"
-	repoName    = "FreshLabDev/makeitMD"
+	repoURL     = "https://github.com/asterfield-dev/makeitMD"
+	repoName    = "asterfield-dev/makeitMD"
 	licenseName = "Apache-2.0"
 	adminURL    = "https://t.me/amtiyo"
 	adminName   = "@amtiyo"
