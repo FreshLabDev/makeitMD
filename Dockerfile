@@ -22,7 +22,7 @@ ARG VERSION=dev
 ARG COMMIT=none
 LABEL org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
-      org.opencontainers.image.source="https://github.com/FreshLabDev/makeitMD"
+      org.opencontainers.image.source="https://github.com/asterfield-dev/makeitMD"
 USER makeitmd
 EXPOSE 8080
 ENTRYPOINT ["/app/makeitmd"]

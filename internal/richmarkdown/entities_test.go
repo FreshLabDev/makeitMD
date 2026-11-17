@@ -4,7 +4,7 @@ package richmarkdown
 import (
 	"testing"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 )
 
 func TestRestoreEntitiesUsesUTF16Offsets(t *testing.T) {

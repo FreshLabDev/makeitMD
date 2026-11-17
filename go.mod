@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-module github.com/FreshLabDev/makeitMD
+module github.com/asterfield-dev/makeitMD
 
 go 1.26.10
 
 require (
-	github.com/FreshLabDev/tg v0.0.1-alpha.7
+	github.com/asterfield-dev/tg v0.4.0-alpha.2
 	github.com/jackc/pgx/v5 v5.9.2
 )
 

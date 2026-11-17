@@ -15,13 +15,13 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/FreshLabDev/tg"
+	"github.com/asterfield-dev/tg"
 
-	"github.com/FreshLabDev/makeitMD/internal/build"
-	"github.com/FreshLabDev/makeitMD/internal/db"
-	"github.com/FreshLabDev/makeitMD/internal/i18n"
-	"github.com/FreshLabDev/makeitMD/internal/metrics"
-	"github.com/FreshLabDev/makeitMD/internal/richmarkdown"
+	"github.com/asterfield-dev/makeitMD/internal/build"
+	"github.com/asterfield-dev/makeitMD/internal/db"
+	"github.com/asterfield-dev/makeitMD/internal/i18n"
+	"github.com/asterfield-dev/makeitMD/internal/metrics"
+	"github.com/asterfield-dev/makeitMD/internal/richmarkdown"
 )
 
 const (
@@ -462,10 +462,10 @@ func (b *Bot) handleCallback(ctx context.Context, query *tg.CallbackQuery) error
 	if err := b.telegram.AnswerCallbackQuery(ctx, query.ID, ""); err != nil {
 		b.log.Warn("answer callback query failed", "error", err)
 	}
-	// The client models an absent callback message as a zero value rather than
-	// nil, which would address chat 0. makeitMD only ever attaches buttons to a
-	// private-chat message of its own, so anything else is not this panel.
-	if query.Message.Chat.Type != "private" || query.Message.MessageID == 0 {
+	// A press under an inline message has no message. makeitMD only ever
+	// attaches buttons to a private-chat message of its own, so anything else
+	// is not this panel.
+	if query.Message == nil || query.Message.Chat.Type != "private" || query.Message.MessageID == 0 {
 		return nil
 	}
 	// core.touch runs before any language write, so the person exists in core

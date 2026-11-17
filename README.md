@@ -3,9 +3,9 @@
 <p align="center"><strong>Send Markdown. Get native Telegram rich text.</strong><br/>A deliberately small Go bot built directly on Telegram Bot API 10.1.</p>
 
 <p align="center">
-  <a href="https://github.com/FreshLabDev/makeitMD/releases"><img src="https://img.shields.io/github/v/release/FreshLabDev/makeitMD?include_prereleases&sort=semver&style=for-the-badge&label=latest&labelColor=0f172a&color=26A5E4" alt="latest version"></a>
+  <a href="https://github.com/asterfield-dev/makeitMD/releases"><img src="https://img.shields.io/github/v/release/asterfield-dev/makeitMD?include_prereleases&sort=semver&style=for-the-badge&label=latest&labelColor=0f172a&color=26A5E4" alt="latest version"></a>
   <a href="docs/versioning.md"><img src="https://img.shields.io/badge/stable-v0.1.0-26A5E4?style=for-the-badge&labelColor=0f172a" alt="stable version"></a>
-  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/FreshLabDev/makeitMD?style=for-the-badge&logo=go&logoColor=white&label=go&labelColor=0f172a&color=00ADD8" alt="Go version"></a>
+  <a href="go.mod"><img src="https://img.shields.io/github/go-mod/go-version/asterfield-dev/makeitMD?style=for-the-badge&logo=go&logoColor=white&label=go&labelColor=0f172a&color=00ADD8" alt="Go version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-334155?style=for-the-badge&labelColor=0f172a" alt="Apache-2.0 license"></a>
   <a href="https://t.me/makeitMD_bot"><img src="https://img.shields.io/badge/telegram-%40makeitMD__bot-26A5E4?style=for-the-badge&logo=telegram&logoColor=white&labelColor=0f172a" alt="Telegram bot"></a>
 </p>
@@ -32,7 +32,7 @@ chat and receive Telegram's native rendering immediately.
 | Native rendering | Uses Telegram `sendRichMessage`, not a custom parser |
 | Minimal interaction | `/start` only, one panel: two tabs and the language, no settings |
 | Private operations | Statistics and source audit stay operator-only |
-| Shared integration | Uses the family’s small `github.com/FreshLabDev/tg` HTTP client |
+| Shared integration | Uses the family’s small `github.com/asterfield-dev/tg` HTTP client |
 
 > **Result:** one text message or text file in, one native rich message out.
 
@@ -236,7 +236,7 @@ release workflow published to GHCR and never builds one:
 
 ```sh
 # in the stack directory, alongside .env
-MAKEITMD_IMAGE=ghcr.io/freshlabdev/makeitmd@sha256:<digest> docker compose up -d
+MAKEITMD_IMAGE=ghcr.io/asterfield-dev/makeitmd@sha256:<digest> docker compose up -d
 ```
 
 Pin `MAKEITMD_IMAGE` by digest rather than tag. A digest names one exact build,
