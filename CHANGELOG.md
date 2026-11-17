@@ -13,6 +13,30 @@ See [`docs/versioning.md`](docs/versioning.md) for what the numbers mean and
 
 Use this section for changes that are merged but not released yet.
 
+## v0.1.5 - 2026-11-17
+
+The GitHub organization FreshLabDev is now asterfield-dev, and the bot moves
+with it. Nothing a person sees in Telegram changes.
+
+### Changed
+
+- **Images are published as `ghcr.io/asterfield-dev/makeitmd`.** The
+  organization was renamed, and GitHub Container Registry does not redirect
+  the old name: `ghcr.io/freshlabdev/makeitmd` answers 403. Point the
+  deployment's image at the new path; every earlier digest is there under it
+  too.
+- tg moves from `v0.0.1-alpha.7` to `v0.4.0-alpha.2`, whose module path is
+  `github.com/asterfield-dev/tg`. A press without its message is now nil
+  rather than an empty message; the panel still ignores it.
+- Links, the module path and the docs point at `github.com/asterfield-dev`.
+  Old links still redirect.
+
+### Known Limitations
+
+- Released as a stable patch without a pre-release first, at the owner's
+  request: the change is the organization rename and the tg upgrade, checked
+  by the full test suite, not by a run on a test bot.
+
 ## v0.1.4 - 2026-10-20
 
 makeitMD renders Markdown sent as a text file, renders formulas the way
@@ -275,7 +299,7 @@ settings.
   refuses a tag that is not on the branch its channel is published from.
   Earlier pre-releases were tagged on `main` under the previous rule; they are
   left as they are.
-- `github.com/FreshLabDev/tg` moves to `v0.0.1-alpha.7`. It carries one fix:
+- `github.com/asterfield-dev/tg` moves to `v0.0.1-alpha.7`. It carries one fix:
   a preflight probe is marked as a probe, so the `404 method not found` it
   expects stops being counted and logged as a transport failure. All four bots
   on the shared client now run the same version.
@@ -328,7 +352,7 @@ against a Telegram server that cannot render Markdown for it.
 
 ### Changed
 
-- Telegram goes through `github.com/FreshLabDev/tg`, the client shared by the
+- Telegram goes through `github.com/asterfield-dev/tg`, the client shared by the
   bot family, and `internal/telegram` is gone. The transport was the same code
   three bots each carried, and the copies had drifted. What makeitMD needs and
   the others do not -- the raw payloads it stores, Telegram's own entity
